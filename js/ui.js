@@ -832,22 +832,61 @@
       switchUser(id);
       toast(t('profileCreated', { n: TG.Store.userName() }));
     });
-    document.getElementById('userImportFile').addEventListener('change', e => {
-      const f = e.target.files[0];
-      if (!f) return;
-      const r = new FileReader();
-      r.onload = () => {
-        const id = TG.Store.importAsNewUser(String(r.result));
-        if (!id) { toast(importError()); return; }
+    document.getElementById('userImportFile').addEventListener('change', e => readFile(e.target, text => {
+      const parsed = TG.Store.parseFile(text);
+      if (!parsed) { toast(importError()); return; }
+      const add = () => {
+        const id = TG.Store.importAsNewUser(text);
+        if (!id) { toast(TG.Store.parseError ? importError() : t('profileCreateFail')); return; }
         toast(t('profileImported', { n: TG.Store.userName(TG.Store.user(id)) }));
-        renderProfiles();
+        if (route === 'profiles') renderProfiles();
       };
-      r.readAsText(f);
-    });
+      const dup = parsed.name && TG.Store.users().some(u => TG.Store.userName(u) === parsed.name);
+      if (dup) confirmBox(t('confirmDuplicate', { n: parsed.name }), add);
+      else add();
+    }));
   }
 
   function importError() {
-    return TG.Store.parseError === 'newer' ? t('importNewer') : t('importFail');
+    const e = TG.Store.parseError;
+    return e === 'newer' ? t('importNewer') : e === 'backup' ? t('importBackupFail') : t('importFail');
+  }
+
+  const MAX_FILE_BYTES = 10 * 1024 * 1024;
+
+  /** Прочитать выбранный JSON-файл (с ограничением размера). */
+  function readFile(input, onText) {
+    const f = input.files[0];
+    input.value = ''; // чтобы тот же файл можно было выбрать повторно
+    if (!f) return;
+    if (f.size > MAX_FILE_BYTES) { toast(t('fileTooBig')); return; }
+    const r = new FileReader();
+    r.onload = () => onText(String(r.result));
+    r.onerror = () => toast(t('importFail'));
+    r.readAsText(f);
+  }
+
+  /** Краткое описание файла прогресса для подтверждения. */
+  function fileSummary(parsed) {
+    const st = parsed.state, lang = st.settings.layoutLang;
+    const L = TG.Curriculum.lessons(lang).length;
+    return {
+      n: parsed.name || '—',
+      l: Math.min(st.profiles[lang].lessonIndex + 1, L) + '/' + L,
+      s: st.profiles.ru.sessions.length + st.profiles.en.sessions.length
+    };
+  }
+
+  /** Экран восстановления: показывается, если экран не удалось отрисовать. */
+  function renderRecovery(err) {
+    console.error('TypeGo:', err);
+    if (session && session.engine) session.engine.abort();
+    session = null;
+    route = 'recovery';
+    main.innerHTML = '<section class="card warn recovery"><h2>' + esc(t('recoveryTitle')) + '</h2><p>' + esc(t('recoveryText')) + '</p>' +
+      '<div class="row wrap gap"><button class="btn primary" data-action="nav:home">' + esc(t('toHome')) + '</button>' +
+      '<button class="btn ghost" data-action="export-raw">' + esc(t('exportRaw')) + '</button>' +
+      '<button class="btn ghost danger-text" data-action="reset-all">' + esc(t('resetBtn')) + '</button></div></section>';
   }
 
   function switchUser(id) {
@@ -890,7 +929,9 @@
       '<button class="btn primary" data-action="export">' + t('exportBtn') + '</button>' +
       '<button class="btn ghost" data-action="import">' + t('importBtn') + '</button>' +
       '<button class="btn ghost danger-text" data-action="reset-layout">' + t('resetLayoutBtn') + '</button>' +
-      '<button class="btn ghost danger-text" data-action="reset-all">' + t('resetBtn') + '</button></div>' +
+      '<button class="btn ghost danger-text" data-action="reset-all">' + t('resetBtn') + '</button>' +
+      (TG.Store.backupTime() ? '<button class="btn ghost" data-action="restore-backup">' + esc(t('restoreBackup', { d: dateStr(TG.Store.backupTime()) })) + '</button>' : '') +
+      '</div>' +
       '<input type="file" id="importFile" accept=".json,application/json" hidden>' +
       '<p class="muted small">' + t('about') + '</p></div>' +
       '</section>';
@@ -913,16 +954,15 @@
       TG.Store.save();
       toast(t('saved'));
     }));
-    document.getElementById('importFile').addEventListener('change', e => {
-      const f = e.target.files[0];
-      if (!f) return;
-      const r = new FileReader();
-      r.onload = () => {
-        if (TG.Store.importText(String(r.result))) { toast(t('importOk')); TG.App.applyPrefs(); }
+    document.getElementById('importFile').addEventListener('change', e => readFile(e.target, text => {
+      const parsed = TG.Store.parseFile(text);
+      if (!parsed) { toast(importError()); return; }
+      const sum = fileSummary(parsed);
+      confirmBox(t('confirmImport', { cur: TG.Store.userName(), n: sum.n, l: sum.l, s: sum.s }), () => {
+        if (TG.Store.importText(text)) { toast(t('importOk')); TG.App.applyPrefs(); }
         else toast(importError());
-      };
-      r.readAsText(f);
-    });
+      });
+    }));
   }
 
   /* ---------- навигация и события ---------- */
@@ -940,7 +980,11 @@
     if (location.hash !== '#' + r) history.replaceState(null, '', '#' + r);
     updateNav();
     if (r !== 'profiles') pickerMode = false;
-    ({ home: renderHome, train: renderTrain, stats: renderStats, texts: renderTexts, settings: renderSettings, profiles: renderProfiles }[r] || renderHome)();
+    try {
+      ({ home: renderHome, train: renderTrain, stats: renderStats, texts: renderTexts, settings: renderSettings, profiles: renderProfiles }[r] || renderHome)();
+    } catch (err) {
+      renderRecovery(err);
+    }
     window.scrollTo(0, 0);
   }
 
@@ -996,6 +1040,7 @@
       case 'reset-th': ST().thresholds = Object.assign({}, TG.CONFIG.THRESHOLDS); TG.Store.save(); renderSettings(); toast(t('saved')); break;
       case 'reset-all': confirmBox(t('confirmReset'), () => { TG.Store.reset(true); TG.App.applyPrefs(); }); break;
       case 'reset-layout': confirmBox(t('confirmResetLayout', { l: t('layoutName.' + LANG()) }), () => {
+        TG.Store.backupCurrent();
         S().profiles[LANG()] = TG.Store.newProfile();
         S().daily = null;
         TG.Store.saveNow();
@@ -1013,6 +1058,11 @@
       }
       case 'save': TG.Store.exportFile(); toast(t('exported')); break;
       case 'reload': location.reload(); break;
+      case 'export-raw': TG.Store.exportRaw(); break;
+      case 'restore-backup': confirmBox(t('confirmRestore'), () => {
+        if (TG.Store.restoreBackup()) { toast(t('restoreOk')); TG.App.applyPrefs(); }
+        else toast(t('restoreFail'));
+      }); break;
       case 'dismiss-issue': TG.App.dismissIssue(arg); break;
       case 'user-select':
         if (arg === TG.Store.index.current) { pickerMode = false; go('home'); break; }
@@ -1047,8 +1097,12 @@
     if (route === 'session' && session && session.engine) {
       if (e.key === 'Escape') { e.preventDefault(); onAction('exit'); return; }
       const cur = session; // сессия может завершиться внутри keydown
-      cur.handled = cur.engine.keydown(e);
-      if (cur.handled && cur.kb) cur.kb.press(e.code);
+      try {
+        cur.handled = cur.engine.keydown(e);
+        if (cur.handled && cur.kb) cur.kb.press(e.code);
+      } catch (err) {
+        renderRecovery(err);
+      }
       return;
     }
     if (route === 'session' && session && session.free) {
@@ -1073,7 +1127,10 @@
       main = container;
       document.addEventListener('click', e => {
         const a = e.target.closest('[data-action]');
-        if (a && !a.disabled) { onAction(a.dataset.action, a); return; }
+        if (a && !a.disabled) {
+          try { onAction(a.dataset.action, a); } catch (err) { renderRecovery(err); }
+          return;
+        }
         if (route === 'session' && session && session.engine && e.target.closest('.textbox')) focusInput();
       });
       document.addEventListener('keydown', onKeydown);
@@ -1087,6 +1144,7 @@
       else go(route);
     },
     route: () => route,
+    renderRecovery,
     // для отладки и проверки
     _internals: { makeEx, startSession, applyResult, dailyPlan }
   };

@@ -67,7 +67,20 @@
   }
 
   function start() {
-    TG.Store.load();
+    try {
+      TG.Store.load();
+    } catch (err) {
+      // крайний случай: данные не удалось разобрать даже после проверки схемы
+      console.error('TypeGo: load failed', err);
+      TG.Store.index = { current: 'recovery', users: [{ id: 'recovery', name: '', color: '#6b7384', createdAt: Date.now(), lastActive: 0 }] };
+      TG.Store.state = null;
+    }
+    if (!TG.Store.state) {
+      TG.I18n.set((navigator.language || 'ru').slice(0, 2) === 'ru' ? 'ru' : 'en');
+      TG.UI.init(document.getElementById('main'));
+      TG.UI.renderRecovery(new Error('state unavailable'));
+      return;
+    }
     const st = TG.Store.settings();
     TG.I18n.set(st.uiLang);
     applyTheme();

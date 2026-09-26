@@ -78,15 +78,121 @@
 
   function migrate(data) {
     const d = defaults();
+    shape(data);
     fill(data, d);
     ['ru', 'en'].forEach(l => fill(data.profiles[l], newProfile()));
+    sanitize(data);
     data.version = C.SCHEMA_VERSION;
     return data;
   }
 
+  /* ---------- проверка схемы ----------
+   * Данные из хранилища и из файлов считаются недоверенными: неверные типы приводятся
+   * к допустимым, лишнее отбрасывается. Иначе одно неожиданное значение ломает интерфейс
+   * (null вместо массива) или попадает в разметку.
+   */
+  const isObj = v => v !== null && typeof v === 'object' && !Array.isArray(v);
+  const obj = v => (isObj(v) ? v : {});
+  const arr = v => (Array.isArray(v) ? v : []);
+  const bool = (v, d) => (typeof v === 'boolean' ? v : d);
+  const str = (v, max, d) => (typeof v === 'string' ? v.slice(0, max) : d);
+  const oneOf = (v, list, d) => (list.indexOf(v) >= 0 ? v : d);
+  function num(v, d, min, max) {
+    if (typeof v !== 'number' || !isFinite(v)) return d;
+    if (min != null && v < min) return min;
+    if (max != null && v > max) return max;
+    return v;
+  }
+  const int = (v, d, min, max) => Math.round(num(v, d, min, max));
+
+  /** Каркас: объекты там, где fill() ожидает объекты. */
+  function shape(data) {
+    data.settings = obj(data.settings);
+    data.settings.thresholds = obj(data.settings.thresholds);
+    data.profiles = obj(data.profiles);
+    ['ru', 'en'].forEach(l => { data.profiles[l] = obj(data.profiles[l]); });
+    data.streak = obj(data.streak);
+  }
+
+  /** Отфильтровать записи словаря: оставить только корректные, с ключом допустимой длины. */
+  function cleanMap(m, maxKeyLen, fn) {
+    const out = {};
+    Object.keys(obj(m)).forEach(k => {
+      if (k.length > maxKeyLen || k === '__proto__') return;
+      const v = fn(m[k]);
+      if (v !== undefined) out[k] = v;
+    });
+    return out;
+  }
+
+  function sanitizeProfile(p) {
+    p.lessonIndex = int(p.lessonIndex, 0, 0, 1000);
+    p.introduced = arr(p.introduced).filter(k => typeof k === 'string' && k.length >= 1 && k.length <= 2);
+    p.level = num(p.level, C.LEVEL.start, C.LEVEL.min, C.LEVEL.max);
+    p.keys = cleanMap(p.keys, 2, r => {
+      if (!isObj(r)) return undefined;
+      return {
+        h: int(r.h, 0, 0), e: int(r.e, 0, 0),
+        rec: arr(r.rec).filter(x => Array.isArray(x)).slice(-C.MASTERY.recentSize)
+          .map(x => [x[0] ? 1 : 0, num(x[1], 0, 0, C.MASTERY.rtCap)]),
+        last: num(r.last, 0, 0), ease: num(r.ease, C.SRS.startEase, C.SRS.minEase, 5),
+        ivl: num(r.ivl, 0, 0, 3650), reps: int(r.reps, 0, 0), due: num(r.due, 0, 0)
+      };
+    });
+    p.bigrams = cleanMap(p.bigrams, 2, b => (isObj(b) ? { n: int(b.n, 0, 0), e: int(b.e, 0, 0), rt: num(b.rt, 0, 0) } : undefined));
+    p.trigrams = cleanMap(p.trigrams, 3, t => (isObj(t) ? { n: int(t.n, 0, 0), e: int(t.e, 0, 0) } : undefined));
+    p.confusions = cleanMap(p.confusions, 5, n => (typeof n === 'number' && isFinite(n) ? Math.max(0, Math.round(n)) : undefined));
+    p.sessions = arr(p.sessions).filter(isObj).map(x => ({
+      date: num(x.date, 0, 0), mode: str(x.mode, 20, 'adaptive'),
+      wpm: num(x.wpm, 0, 0, 1000), cpm: num(x.cpm, 0, 0, 5000), acc: num(x.acc, 0, 0, 100),
+      errors: int(x.errors, 0, 0), corrections: int(x.corrections, 0, 0), rtAvg: num(x.rtAvg, 0, 0),
+      stability: num(x.stability, 0, 0, 100), durationS: num(x.durationS, 0, 0), keystrokes: int(x.keystrokes, 0, 0),
+      adaptive: !!x.adaptive, lessonId: str(x.lessonId, 20, null), free: x.free ? true : undefined
+    }));
+    p.lessonsDone = cleanMap(p.lessonsDone, 20, d => (isObj(d) ? { date: num(d.date, 0, 0), best: num(d.best, 0, 0, 1000), placement: d.placement ? true : undefined } : undefined));
+    p.placementDone = bool(p.placementDone, false);
+    p.bestWpm = num(p.bestWpm, 0, 0, 1000);
+    p.totalKeystrokes = int(p.totalKeystrokes, 0, 0);
+    p.totalSeconds = num(p.totalSeconds, 0, 0);
+    p.textPos = cleanMap(p.textPos, 40, v => (typeof v === 'number' && isFinite(v) ? Math.max(0, Math.round(v)) : undefined));
+  }
+
+  function sanitize(data) {
+    const st = data.settings, D = defaults().settings;
+    st.uiLang = oneOf(st.uiLang, ['ru', 'en'], D.uiLang);
+    st.layoutLang = oneOf(st.layoutLang, ['ru', 'en'], D.layoutLang);
+    st.theme = oneOf(st.theme, ['auto', 'light', 'dark'], 'auto');
+    st.dailyMinutes = oneOf(st.dailyMinutes, C.DAILY.options, C.DAILY.defaultMinutes);
+    st.hintsMode = oneOf(st.hintsMode, ['auto', 'always', 'never'], 'auto');
+    st.fontSize = oneOf(st.fontSize, ['s', 'm', 'l'], 'm');
+    ['stopOnError', 'backspace', 'sound', 'showKeyboard', 'showFingers'].forEach(k => { st[k] = bool(st[k], D[k]); });
+    const th = {};
+    Object.keys(C.THRESHOLDS).forEach(k => {
+      th[k] = k === 'stableSessions' ? int(st.thresholds[k], C.THRESHOLDS[k], 1, 10) : num(st.thresholds[k], C.THRESHOLDS[k], 0, 100);
+    });
+    st.thresholds = th;
+    ['ru', 'en'].forEach(l => sanitizeProfile(data.profiles[l]));
+    data.streak = { current: int(data.streak.current, 0, 0), best: int(data.streak.best, 0, 0), lastDay: str(data.streak.lastDay, 10, null) };
+    data.dailyLog = cleanMap(data.dailyLog, 10, v => (typeof v === 'number' && isFinite(v) ? Math.max(0, v) : undefined));
+    const dl = data.daily;
+    data.daily = isObj(dl) && typeof dl.date === 'string' ? {
+      date: dl.date.slice(0, 10), lang: oneOf(dl.lang, ['ru', 'en'], 'ru'), minutes: num(dl.minutes, 10, 1, 60),
+      steps: arr(dl.steps).filter(isObj).slice(0, 10).map(x => ({ type: str(x.type, 20, 'adaptive'), min: num(x.min, 1, 0, 30), done: !!x.done }))
+    } : null;
+    const seen = new Set();
+    data.customTexts = arr(data.customTexts).filter(x => isObj(x) && typeof x.body === 'string' && typeof x.id === 'string' &&
+      /^[\w-]{1,40}$/.test(x.id) && !seen.has(x.id) && seen.add(x.id)).map(x => ({
+      id: x.id, title: str(x.title, 80, ''), body: x.body.slice(0, C.TEXTS.maxChars),
+      lang: oneOf(x.lang, ['ru', 'en'], 'ru'), added: num(x.added, 0, 0)
+    }));
+    data.onboarded = bool(data.onboarded, false);
+    data.createdAt = num(data.createdAt, Date.now(), 0);
+    data.rev = int(data.rev, 0, 0);
+    return data;
+  }
+
   function validate(data) {
-    return data && typeof data === 'object' && data.app === 'TypeGo' &&
-      data.settings && data.profiles && data.profiles.ru && data.profiles.en;
+    return isObj(data) && data.app === 'TypeGo' && isObj(data.profiles);
   }
 
   /** Ограничение размера: история и редкие последовательности обрезаются. */
@@ -126,6 +232,7 @@
   const USER_KEY_RE = /^typego\.v1\.u\.([A-Za-z0-9]+)$/;
   const COLORS = ['#3b6cf6', '#1f9d62', '#d9534f', '#c98a12', '#8e5bd6', '#0f9bb0', '#d6548f', '#6b7384'];
   const userKey = id => C.STORAGE_KEY + '.u.' + id;
+  const backupKey = id => userKey(id) + '.bak';
   const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
   const memory = {};       // резерв на случай недоступного localStorage
@@ -481,7 +588,7 @@
       idx.current = Store.index.current;
       delete memory[id];
       delete blocked[id];
-      try { localStorage.removeItem(userKey(id)); } catch (e) { /* не критично */ }
+      try { localStorage.removeItem(userKey(id)); localStorage.removeItem(backupKey(id)); } catch (e) { /* не критично */ }
       Store.index = idx;
       if (idx.current === id) {
         idx.current = idx.users[0].id;
@@ -539,10 +646,69 @@
       return { state: migrate(data), name };
     },
 
-    /** Загрузить прогресс из JSON в текущего пользователя. Возвращает true при успехе. */
+    /**
+     * Резервная копия текущего пользователя перед заменой данных (импорт, сброс).
+     * Возвращает true, если копия записана (или хранилище недоступно и писать некуда).
+     */
+    backupCurrent() {
+      const id = Store.index.current;
+      let raw = null;
+      try { raw = localStorage.getItem(userKey(id)); } catch (e) { return !available; }
+      if (raw == null) raw = JSON.stringify(Store.state);
+      try {
+        localStorage.setItem(backupKey(id), JSON.stringify({ savedAt: Date.now(), data: raw }));
+        return true;
+      } catch (e) {
+        return false;
+      }
+    },
+
+    /** Время резервной копии текущего пользователя или 0. */
+    backupTime() {
+      const r = readRaw(backupKey(Store.index.current));
+      return r.status === 'ok' && isObj(r.data) && typeof r.data.data === 'string' ? num(r.data.savedAt, 0, 0) : 0;
+    },
+
+    /** Вернуть данные из резервной копии. Возвращает true при успехе. */
+    restoreBackup() {
+      const id = Store.index.current;
+      const r = readRaw(backupKey(id));
+      if (r.status !== 'ok' || !isObj(r.data) || typeof r.data.data !== 'string') return false;
+      let data;
+      try { data = JSON.parse(r.data.data); } catch (e) { return false; }
+      if (!validate(data)) return false;
+      Store.state = migrate(data);
+      delete blocked[id];
+      if (!Store.saveNow()) return false;
+      try { localStorage.removeItem(backupKey(id)); } catch (e) { /* не критично */ }
+      return true;
+    },
+
+    /**
+     * Скачать данные текущего пользователя «как есть» — сырой текст из хранилища,
+     * даже если он повреждён (для восстановления вручную).
+     */
+    exportRaw() {
+      const id = Store.index ? Store.index.current : 'unknown';
+      let raw = null;
+      try { raw = localStorage.getItem(userKey(id)); } catch (e) { /* недоступно */ }
+      if (raw == null) {
+        try { raw = JSON.stringify(Store.state); } catch (e) { raw = '{}'; }
+      }
+      const blob = new Blob([raw], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'typego-raw-' + id + '-' + TG.Util.today() + '.json';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    },
+
+    /** Загрузить прогресс из JSON в текущего пользователя (с резервной копией). Возвращает true при успехе. */
     importText(text) {
       const r = Store.parseFile(text);
       if (!r || Store.conflict) return false;
+      if (!Store.backupCurrent()) { Store.parseError = 'backup'; return false; }
       Store.state = r.state;
       delete blocked[Store.index.current]; // пользователь сознательно заменил данные
       return Store.saveNow();
@@ -555,8 +721,9 @@
       return Store.createUser(r.name, r.state);
     },
 
-    /** Сбросить прогресс текущего пользователя. */
+    /** Сбросить прогресс текущего пользователя (с резервной копией). */
     reset(keepSettings) {
+      Store.backupCurrent();
       const s = Store.state && Store.state.settings;
       Store.state = defaults();
       if (keepSettings && s) Store.state.settings = s;
