@@ -1,6 +1,7 @@
 /*
  * Хранение данных.
  * Основное хранилище — localStorage (работает при открытии файла через file:// во всех браузерах).
+ * У каждого пользователя (профиля ученика) своё состояние под отдельным ключом.
  * Запись отложенная (debounce) + принудительная при закрытии страницы.
  * Резервная копия — JSON-файл, который пользователь сохраняет и загружает кнопками.
  */
@@ -108,20 +109,74 @@
     if (days.length > 400) days.slice(0, days.length - 400).forEach(d => delete state.dailyLog[d]);
   }
 
+  /*
+   * Пользователи (профили учеников) — без паролей.
+   * Индекс: USERS_KEY → {current, users:[{id, name, color, createdAt, lastActive}]}.
+   * Состояние каждого пользователя хранится отдельно: STORAGE_KEY + '.u.' + id.
+   * Слово «profile» в коде означает прогресс по раскладке внутри состояния пользователя.
+   */
+  const USERS_KEY = C.STORAGE_KEY + '.users';
+  const COLORS = ['#3b6cf6', '#1f9d62', '#d9534f', '#c98a12', '#8e5bd6', '#0f9bb0', '#d6548f', '#6b7384'];
+  const userKey = id => C.STORAGE_KEY + '.u.' + id;
+  const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
+  function readJSON(key) {
+    try {
+      const raw = localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) {
+      storageOk = false;
+      return null;
+    }
+  }
+
+  function writeJSON(key, value) {
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+      Store.storageOk = true;
+      return true;
+    } catch (e) {
+      Store.storageOk = false;
+      console.warn('TypeGo: не удалось сохранить в localStorage', e);
+      return false;
+    }
+  }
+
+  const memory = {}; // резерв, если localStorage недоступен
+
+  function loadUserState(id) {
+    const data = readJSON(userKey(id)) || memory[id];
+    return validate(data) ? migrate(data) : null;
+  }
+
+  function nextColor() {
+    return COLORS[Store.index.users.length % COLORS.length];
+  }
+
   const Store = {
-    state: null,
+    state: null,      // состояние текущего пользователя
+    index: null,      // {current, users}
     storageOk: true,
 
     load() {
-      let data = null;
-      try {
-        const raw = localStorage.getItem(C.STORAGE_KEY);
-        if (raw) data = JSON.parse(raw);
-      } catch (e) {
-        storageOk = false;
+      let index = readJSON(USERS_KEY);
+      if (!index || !Array.isArray(index.users) || !index.users.length) {
+        // первый запуск или переход со старой версии без профилей
+        const legacy = readJSON(C.STORAGE_KEY);
+        const id = newId();
+        index = { current: id, users: [{ id, name: '', color: COLORS[0], createdAt: Date.now(), lastActive: Date.now() }] };
+        Store.index = index;
+        Store.state = validate(legacy) ? migrate(legacy) : defaults();
+        Store.saveNow();
+        if (validate(legacy) && Store.storageOk) {
+          try { localStorage.removeItem(C.STORAGE_KEY); } catch (e) { /* не критично */ }
+        }
+      } else {
+        Store.index = index;
+        if (!index.users.some(u => u.id === index.current)) index.current = index.users[0].id;
+        Store.state = loadUserState(index.current) || defaults();
       }
-      Store.storageOk = storageOk;
-      Store.state = validate(data) ? migrate(data) : defaults();
+      Store.storageOk = Store.storageOk && storageOk;
       return Store.state;
     },
 
@@ -132,16 +187,97 @@
 
     saveNow() {
       clearTimeout(saveTimer);
-      if (!Store.state) return;
-      try {
-        compact(Store.state);
-        localStorage.setItem(C.STORAGE_KEY, JSON.stringify(Store.state));
-        Store.storageOk = true;
-      } catch (e) {
-        Store.storageOk = false;
-        console.warn('TypeGo: не удалось сохранить в localStorage', e);
-      }
+      if (!Store.state || !Store.index) return;
+      compact(Store.state);
+      const u = Store.user();
+      if (u) u.lastActive = Date.now();
+      memory[Store.index.current] = Store.state;
+      writeJSON(userKey(Store.index.current), Store.state);
+      writeJSON(USERS_KEY, Store.index);
     },
+
+    /* ---------- пользователи ---------- */
+
+    users() { return Store.index.users; },
+
+    user(id) {
+      const uid = id || (Store.index && Store.index.current);
+      return Store.index ? Store.index.users.find(u => u.id === uid) : null;
+    },
+
+    /** Имя для отображения: безымянный первый профиль получает имя по номеру. */
+    userName(u) {
+      u = u || Store.user();
+      if (!u) return '';
+      if (u.name) return u.name;
+      const n = Store.index.users.indexOf(u) + 1;
+      return (TG.I18n ? TG.I18n.t('profileDefaultName') : 'Profile') + ' ' + n;
+    },
+
+    /** Краткая сводка без переключения: для списка профилей. */
+    userSummary(id) {
+      const st = id === Store.index.current ? Store.state : loadUserState(id);
+      if (!st) return null;
+      const lang = st.settings.layoutLang;
+      const p = st.profiles[lang];
+      return {
+        lang,
+        lessonIndex: p.lessonIndex,
+        sessions: st.profiles.ru.sessions.length + st.profiles.en.sessions.length,
+        bestWpm: Math.max(st.profiles.ru.bestWpm || 0, st.profiles.en.bestWpm || 0),
+        streak: st.streak
+      };
+    },
+
+    /** Создать пользователя. Язык и тема наследуются от текущего, прогресс — с нуля. */
+    createUser(name, state) {
+      Store.saveNow();
+      const id = newId();
+      const cur = Store.state && Store.state.settings;
+      const st = state || defaults();
+      if (!state && cur) {
+        st.settings.uiLang = cur.uiLang;
+        st.settings.layoutLang = cur.layoutLang;
+        st.settings.theme = cur.theme;
+      }
+      Store.index.users.push({ id, name: (name || '').trim().slice(0, 40), color: nextColor(), createdAt: Date.now(), lastActive: Date.now() });
+      memory[id] = st;
+      writeJSON(userKey(id), st);
+      writeJSON(USERS_KEY, Store.index);
+      return id;
+    },
+
+    switchUser(id) {
+      if (!Store.user(id)) return false;
+      Store.saveNow();
+      Store.index.current = id;
+      Store.state = loadUserState(id) || defaults();
+      Store.saveNow();
+      return true;
+    },
+
+    renameUser(id, name) {
+      const u = Store.user(id);
+      if (!u) return;
+      u.name = (name || '').trim().slice(0, 40);
+      writeJSON(USERS_KEY, Store.index);
+    },
+
+    /** Удалить пользователя и его прогресс. Последнего удалить нельзя. */
+    deleteUser(id) {
+      if (Store.index.users.length <= 1 || !Store.user(id)) return false;
+      Store.index.users = Store.index.users.filter(u => u.id !== id);
+      delete memory[id];
+      try { localStorage.removeItem(userKey(id)); } catch (e) { /* не критично */ }
+      if (Store.index.current === id) {
+        Store.index.current = Store.index.users[0].id;
+        Store.state = loadUserState(Store.index.current) || defaults();
+      }
+      Store.saveNow();
+      return true;
+    },
+
+    /* ---------- текущий пользователь ---------- */
 
     profile(lang) {
       return Store.state.profiles[lang || Store.state.settings.layoutLang];
@@ -155,30 +291,49 @@
       return Store.state.settings.thresholds;
     },
 
-    /** Скачать файл с прогрессом. */
+    /** Скачать файл с прогрессом текущего пользователя. */
     exportFile() {
       Store.saveNow();
-      const payload = Object.assign({ exportedAt: new Date().toISOString() }, Store.state);
+      const name = Store.userName();
+      const payload = Object.assign({ exportedAt: new Date().toISOString(), profileName: name }, Store.state);
       const blob = new Blob([JSON.stringify(payload, null, 1)], { type: 'application/json' });
+      const safe = name.replace(/[\\/:*?"<>|\s]+/g, '_').slice(0, 40) || 'profile';
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = 'typego-progress-' + TG.Util.today() + '.json';
+      a.download = 'typego-' + safe + '-' + TG.Util.today() + '.json';
       document.body.appendChild(a);
       a.click();
       setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
     },
 
-    /** Загрузить прогресс из текста JSON. Возвращает true при успехе. */
-    importText(text) {
+    /** Разобрать файл прогресса. Возвращает {state, name} или null. */
+    parseFile(text) {
       let data;
-      try { data = JSON.parse(text); } catch (e) { return false; }
-      if (!validate(data)) return false;
+      try { data = JSON.parse(text); } catch (e) { return null; }
+      if (!validate(data)) return null;
+      const name = typeof data.profileName === 'string' ? data.profileName : '';
       delete data.exportedAt;
-      Store.state = migrate(data);
+      delete data.profileName;
+      return { state: migrate(data), name };
+    },
+
+    /** Загрузить прогресс из JSON в текущего пользователя. Возвращает true при успехе. */
+    importText(text) {
+      const r = Store.parseFile(text);
+      if (!r) return false;
+      Store.state = r.state;
       Store.saveNow();
       return true;
     },
 
+    /** Создать нового пользователя из файла прогресса. Возвращает id или null. */
+    importAsNewUser(text) {
+      const r = Store.parseFile(text);
+      if (!r) return null;
+      return Store.createUser(r.name, r.state);
+    },
+
+    /** Сбросить прогресс текущего пользователя. */
     reset(keepSettings) {
       const s = Store.state && Store.state.settings;
       Store.state = defaults();

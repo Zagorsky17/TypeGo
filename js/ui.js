@@ -16,6 +16,7 @@
   let session = null;       // активная тренировка
   let lastResult = null;    // {ex, res, report}
   let heatMode = 'mastery';
+  let pickerMode = false;   // экран профилей как выбор «Кто занимается?» при запуске
 
   /* ---------- утилиты отображения ---------- */
 
@@ -72,6 +73,26 @@
       if (b && b.dataset.m === 'yes') onOk();
     });
     document.body.appendChild(el);
+  }
+
+  /** Модальное окно с полем ввода. */
+  function promptBox(label, value, onOk) {
+    const el = U.el('<div class="modal-back"><form class="modal"><label class="block">' + esc(label) +
+      '<input type="text" maxlength="40" value="' + esc(value || '') + '"></label><div class="row end">' +
+      '<button type="button" class="btn ghost" data-m="no">' + t('cancel') + '</button>' +
+      '<button type="submit" class="btn primary">' + t('save') + '</button></div></form></div>');
+    const input = el.querySelector('input');
+    el.addEventListener('click', e => {
+      if (e.target === el || e.target.closest('[data-m=no]')) el.remove();
+    });
+    el.querySelector('form').addEventListener('submit', e => {
+      e.preventDefault();
+      el.remove();
+      onOk(input.value);
+    });
+    document.body.appendChild(el);
+    input.focus();
+    input.select();
   }
 
   function dateStr(ts) {
@@ -769,6 +790,68 @@
       '</section>';
   }
 
+  /* ---------- профили ---------- */
+
+  function avatar(u) {
+    const name = TG.Store.userName(u);
+    return '<i class="avatar" style="background:' + esc(u.color) + '">' + esc(name.charAt(0).toUpperCase()) + '</i>';
+  }
+
+  function renderProfiles() {
+    const users = TG.Store.users();
+    const curId = TG.Store.index.current;
+    let html = '<section class="profiles"><h2>' + (pickerMode ? t('whoIsLearning') : t('profiles')) + '</h2>' +
+      '<p class="muted">' + t('profilesIntro') + '</p><div class="user-grid">';
+    users.forEach(u => {
+      const sum = TG.Store.userSummary(u.id);
+      const isCur = u.id === curId;
+      const L = sum ? TG.Curriculum.lessons(sum.lang).length : 0;
+      const meta = sum && sum.sessions
+        ? t('profileStats', { l: Math.min(sum.lessonIndex + 1, L) + '/' + L, s: sum.sessions, w: sum.bestWpm || '—' }) + '<br>' +
+          t('lastActive', { d: dateStr(u.lastActive) })
+        : t('noPractice');
+      html += '<div class="user-card' + (isCur ? ' on' : '') + '">' +
+        '<button class="user-main" data-action="user-select:' + u.id + '">' + avatar(u) +
+        '<span><b>' + esc(TG.Store.userName(u)) + '</b>' + (isCur ? ' <span class="tag">' + t('activeProfile') + '</span>' : '') +
+        '<small class="muted">' + meta + '</small></span></button>' +
+        '<div class="row"><button class="btn link" data-action="user-rename:' + u.id + '">' + t('rename') + '</button>' +
+        (users.length > 1 ? '<button class="btn link danger-text" data-action="user-delete:' + u.id + '">' + t('remove') + '</button>' : '') +
+        '</div></div>';
+    });
+    html += '</div><div class="card"><h3>' + t('newProfile') + '</h3>' +
+      '<form class="row wrap" id="newUserForm"><input id="newUserName" type="text" maxlength="40" placeholder="' + esc(t('profileNamePh')) + '" aria-label="' + esc(t('profileName')) + '">' +
+      '<button class="btn primary" type="submit">' + t('create') + '</button>' +
+      '<button class="btn ghost" type="button" data-action="user-import">' + t('importAsNew') + '</button></form>' +
+      '<input type="file" id="userImportFile" accept=".json,application/json" hidden></div></section>';
+    main.innerHTML = html;
+    document.getElementById('newUserForm').addEventListener('submit', e => {
+      e.preventDefault();
+      const name = document.getElementById('newUserName').value.trim();
+      const id = TG.Store.createUser(name);
+      switchUser(id);
+      toast(t('profileCreated', { n: TG.Store.userName() }));
+    });
+    document.getElementById('userImportFile').addEventListener('change', e => {
+      const f = e.target.files[0];
+      if (!f) return;
+      const r = new FileReader();
+      r.onload = () => {
+        const id = TG.Store.importAsNewUser(String(r.result));
+        if (!id) { toast(t('importFail')); return; }
+        toast(t('profileImported', { n: TG.Store.userName(TG.Store.user(id)) }));
+        renderProfiles();
+      };
+      r.readAsText(f);
+    });
+  }
+
+  function switchUser(id) {
+    TG.Store.switchUser(id);
+    pickerMode = false;
+    TG.App.applyPrefs();
+    go('home');
+  }
+
   /* ---------- настройки ---------- */
 
   function renderSettings() {
@@ -798,7 +881,7 @@
         return '<label><span><b>' + esc(d[0]) + '</b><small>' + esc(d[1]) + '</small></span><input type="number" min="' + (k === 'stableSessions' ? 1 : 0) +
           '" max="' + (k === 'stableSessions' ? 10 : 100) + '" step="1" data-th="' + k + '" value="' + st.thresholds[k] + '"></label>';
       }).join('') + '</div></div>' +
-      '<div class="card"><h3>' + t('data') + '</h3><p class="muted">' + t('dataInfo') + '</p><div class="row wrap gap">' +
+      '<div class="card"><h3>' + t('data') + ' · ' + esc(t('currentProfileData', { n: TG.Store.userName() })) + '</h3><p class="muted">' + t('dataInfo') + '</p><div class="row wrap gap">' +
       '<button class="btn primary" data-action="export">' + t('exportBtn') + '</button>' +
       '<button class="btn ghost" data-action="import">' + t('importBtn') + '</button>' +
       '<button class="btn ghost danger-text" data-action="reset-layout">' + t('resetLayoutBtn') + '</button>' +
@@ -851,7 +934,8 @@
     route = r;
     if (location.hash !== '#' + r) history.replaceState(null, '', '#' + r);
     updateNav();
-    ({ home: renderHome, train: renderTrain, stats: renderStats, texts: renderTexts, settings: renderSettings }[r] || renderHome)();
+    if (r !== 'profiles') pickerMode = false;
+    ({ home: renderHome, train: renderTrain, stats: renderStats, texts: renderTexts, settings: renderSettings, profiles: renderProfiles }[r] || renderHome)();
     window.scrollTo(0, 0);
   }
 
@@ -919,6 +1003,32 @@
         break;
       }
       case 'save': TG.Store.exportFile(); toast(t('exported')); break;
+      case 'user-select':
+        if (arg === TG.Store.index.current) { pickerMode = false; go('home'); break; }
+        switchUser(arg);
+        toast(t('switchedTo', { n: TG.Store.userName() }));
+        break;
+      case 'user-rename': {
+        const u = TG.Store.user(arg);
+        promptBox(t('profileName'), u.name || TG.Store.userName(u), v => {
+          TG.Store.renameUser(arg, v);
+          TG.App.renderHeader();
+          renderProfiles();
+        });
+        break;
+      }
+      case 'user-delete': {
+        const u = TG.Store.user(arg);
+        confirmBox(t('confirmDeleteProfile', { n: TG.Store.userName(u) }), () => {
+          const wasCur = arg === TG.Store.index.current;
+          TG.Store.deleteUser(arg);
+          if (wasCur) TG.App.applyPrefs();
+          TG.App.renderHeader();
+          go('profiles');
+        });
+        break;
+      }
+      case 'user-import': document.getElementById('userImportFile').click(); break;
     }
   }
 
@@ -959,6 +1069,8 @@
       document.addEventListener('input', onInput);
     },
     go,
+    /** Показать выбор профиля (при запуске, если профилей несколько). */
+    pickProfile() { pickerMode = true; go('profiles'); },
     rerender() {
       if (route === 'session' || route === 'results') go('home');
       else go(route);

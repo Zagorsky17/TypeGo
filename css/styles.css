@@ -144,6 +144,7 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px s
 .btn.danger { background: var(--bad); color: #fff; }
 .btn.danger-text { color: var(--bad); }
 .btn.link { background: none; border: 0; color: var(--muted); font-weight: 500; font-size: 13px; }
+.btn.link.danger-text { color: var(--bad); }
 .btn.sm { padding: 5px 10px; font-size: 13px; }
 .btn.big { width: 100%; padding: 12px; font-size: 16px; margin-top: 10px; }
 .btn kbd { background: transparent; border-color: currentColor; opacity: .7; font-size: 11px; padding: 0 4px; margin-left: 4px; }
@@ -379,6 +380,26 @@ table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-nu
 th, td { padding: 7px 10px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }
 th { color: var(--muted); font-weight: 600; }
 
+/* ---------- профили ---------- */
+.avatar {
+  width: 40px; height: 40px; border-radius: 50%; color: #fff; font-style: normal; font-weight: 700;
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 17px;
+}
+.avatar.sm { width: 20px; height: 20px; font-size: 11px; }
+.user-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 170px; }
+.user-chip span { overflow: hidden; text-overflow: ellipsis; }
+.user-chip.on { border-color: var(--accent); }
+.user-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.user-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow);
+  padding: 10px 12px; display: flex; flex-direction: column; gap: 4px;
+}
+.user-card.on { border-color: var(--accent); }
+.user-main { display: flex; align-items: center; gap: 12px; background: none; border: 0; text-align: left; padding: 6px 4px; border-radius: 10px; }
+.user-main:hover { background: var(--surface-2); }
+.user-main small { display: block; font-size: 12.5px; line-height: 1.4; margin-top: 2px; }
+#newUserForm input { flex: 1; min-width: 180px; }
+
 /* ---------- тексты и настройки ---------- */
 .form { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; margin-bottom: 10px; }
 .form label, label.block { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
@@ -406,7 +427,8 @@ textarea { width: 100%; resize: vertical; }
 }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 .modal-back { position: fixed; inset: 0; background: rgba(0,0,0,.35); display: grid; place-items: center; z-index: 60; padding: 16px; }
-.modal { background: var(--surface); border-radius: var(--radius); padding: 20px; max-width: 420px; box-shadow: var(--shadow); }
+.modal { background: var(--surface); border-radius: var(--radius); padding: 20px; width: min(420px, 100%); box-shadow: var(--shadow); }
+.modal input { width: 100%; margin-top: 4px; }
 .modal p { margin-bottom: 16px; }
 
 /* во время тренировки убираем отвлекающие элементы */
@@ -419,6 +441,7 @@ body.in-session .nav:hover { opacity: 1; }
   .nav { order: 3; width: 100%; justify-content: flex-start; overflow-x: auto; }
   .tools { margin-left: auto; }
   .tool.save span { display: none; }
+  .user-chip span { display: none; }
   .grid3 { grid-template-columns: 1fr 1fr; }
   .th-list { grid-template-columns: 1fr; }
 }
