@@ -170,6 +170,8 @@
     Object.keys(C.THRESHOLDS).forEach(k => {
       th[k] = k === 'stableSessions' ? int(st.thresholds[k], C.THRESHOLDS[k], 1, 10) : num(st.thresholds[k], C.THRESHOLDS[k], 0, 100);
     });
+    if (!(th.accLow < th.accMid && th.accMid < th.accHigh)) ['accLow', 'accMid', 'accHigh'].forEach(k => { th[k] = C.THRESHOLDS[k]; });
+    if (!(th.weakMastery < th.masteredMastery)) ['weakMastery', 'masteredMastery'].forEach(k => { th[k] = C.THRESHOLDS[k]; });
     st.thresholds = th;
     ['ru', 'en'].forEach(l => sanitizeProfile(data.profiles[l]));
     data.streak = { current: int(data.streak.current, 0, 0), best: int(data.streak.best, 0, 0), lastDay: str(data.streak.lastDay, 10, null) };

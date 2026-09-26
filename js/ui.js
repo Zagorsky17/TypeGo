@@ -145,7 +145,7 @@
     const step = plan.steps[i];
     let ex = makeEx(step.type, null, stepMult(step.min));
     if (!ex) ex = makeEx('lesson', null);
-    ex.daily = { index: i, total: plan.steps.length };
+    ex.daily = { index: i, total: plan.steps.length, type: step.type };
     startSession(ex);
   }
 
@@ -215,7 +215,6 @@
     if (session && session.engine) session.engine.abort();
     route = 'session';
     updateNav();
-    if (ex.mode === 'lesson' && ex.lesson) TG.Curriculum.introduce(P(), ex.lesson);
     if (ex.mode === 'free') { renderFree(ex); return; }
     const lang = LANG();
     const st = ST();
@@ -406,6 +405,9 @@
         fs.lastT = now;
       }
     });
+    // свободная печать — это набор, а не вставка: вставленный текст завысил бы скорость
+    area.addEventListener('paste', e => { e.preventDefault(); toast(t('noPaste')); });
+    area.addEventListener('drop', e => e.preventDefault());
     area.focus();
   }
 
@@ -472,6 +474,8 @@
 
     // урок
     if (ex.mode === 'lesson') {
+      // новые клавиши попадают в практику только после завершённой попытки урока
+      TG.Curriculum.introduce(profile, ex.lesson);
       const ev = TG.Curriculum.evaluate(ex.lesson, res, profile, lang, th);
       report.lesson = ev;
       if (ev.passed) {
@@ -504,7 +508,11 @@
     // ежедневная тренировка
     if (ex.daily) {
       const plan = dailyPlan();
-      if (plan.steps[ex.daily.index]) plan.steps[ex.daily.index].done = true;
+      // план мог пересоздаться (сменили длительность или раскладку) — ищем шаг по типу, а не только по номеру
+      const byIndex = plan.steps[ex.daily.index];
+      const step = byIndex && byIndex.type === ex.daily.type && !byIndex.done ? byIndex
+        : plan.steps.find(x => !x.done && x.type === ex.daily.type) || plan.steps.find(x => !x.done);
+      if (step) step.done = true;
       report.dailyNext = plan.steps.findIndex(x => !x.done);
       if (report.dailyNext < 0) report.msgs.push(['dailyCompleteMsg', { n: TG.Stats.currentStreak(st) }]);
     }
@@ -900,6 +908,14 @@
     go('home');
   }
 
+  /** Проверка согласованности порогов. Возвращает ключ ошибки или null. */
+  function thresholdError(th) {
+    if (!(th.accLow < th.accMid && th.accMid < th.accHigh && th.accHigh <= 100)) return 'order';
+    if (!(th.weakMastery < th.masteredMastery)) return 'mastery';
+    if (th.lessonPassAcc > 99 || th.minAccForSpeed > 99) return 'perfect';
+    return null;
+  }
+
   /* ---------- настройки ---------- */
 
   function renderSettings() {
@@ -953,6 +969,8 @@
       let v = Math.round(+el.value);
       if (isNaN(v)) v = TG.CONFIG.THRESHOLDS[k];
       v = k === 'stableSessions' ? U.clamp(v, 1, 10) : U.clamp(v, 0, 100);
+      const err = thresholdError(Object.assign({}, st.thresholds, { [k]: v }));
+      if (err) { el.value = st.thresholds[k]; toast(t('thInvalid.' + err)); return; }
       st.thresholds[k] = v;
       el.value = v;
       TG.Store.save();
@@ -992,8 +1010,23 @@
     window.scrollTo(0, 0);
   }
 
-  function onAction(action, el) {
+  /** Идёт ли тренировка, прогресс которой потеряется при уходе с экрана. */
+  function sessionInProgress() {
+    if (route !== 'session' || !session) return false;
+    if (session.engine) return !session.engine.state.finished && session.engine.state.events.length > 0;
+    if (session.free) { const a = document.getElementById('freeArea'); return !!(a && a.value.length); }
+    return false;
+  }
+
+  // действия, которые уводят с экрана тренировки
+  const LEAVING = ['nav', 'start', 'lesson', 'daily', 'layout-toggle', 'uilang-toggle', 'exit', 'restart'];
+
+  function onAction(action, el, confirmed) {
     const [cmd, arg] = [action.split(':')[0], action.split(':').slice(1).join(':')];
+    if (!confirmed && LEAVING.indexOf(cmd) >= 0 && sessionInProgress()) {
+      confirmBox(t('confirmLeaveSession'), () => onAction(action, el, true));
+      return;
+    }
     switch (cmd) {
       case 'nav': go(arg); break;
       case 'start': startKind(arg); break;
@@ -1098,6 +1131,7 @@
   }
 
   function onKeydown(e) {
+    if (document.querySelector('.modal-back')) return; // открыто окно — ввод не для тренировки
     if (route === 'session' && session && session.engine) {
       if (e.key === 'Escape') { e.preventDefault(); onAction('exit'); return; }
       const cur = session; // сессия может завершиться внутри keydown
@@ -1110,7 +1144,7 @@
       return;
     }
     if (route === 'session' && session && session.free) {
-      if (e.key === 'Escape') { e.preventDefault(); go('train'); }
+      if (e.key === 'Escape') { e.preventDefault(); onAction('exit'); }
       return;
     }
     if (route === 'results' && e.key === 'Enter' && !e.target.closest('input,textarea,select,button')) {

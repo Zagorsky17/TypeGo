@@ -82,6 +82,13 @@
     recoveryTitle: 'Не удалось показать экран',
     recoveryText: 'Похоже, часть данных профиля повреждена. Ваши сохранённые данные не изменены. Можно вернуться на главную, скачать данные как есть (для восстановления) или сбросить прогресс этого профиля.',
     exportRaw: 'Скачать данные как есть',
+    confirmLeaveSession: 'Прервать тренировку? Результат этой попытки не сохранится.',
+    noPaste: 'В свободной печати текст нужно набирать, а не вставлять',
+    thInvalid: {
+      order: 'Пороги точности должны идти по возрастанию: нижний < средний < высокий ≤ 100.',
+      mastery: 'Порог слабой клавиши должен быть меньше порога освоенной.',
+      perfect: 'Требование 100% не оставляет права на единственную ошибку — максимум 99.'
+    },
     reload: 'Перезагрузить',
     dismiss: 'Скрыть',
     importNewer: 'Файл создан более новой версией TypeGo — обновите приложение.',
@@ -415,6 +422,13 @@
     recoveryTitle: 'Could not display the screen',
     recoveryText: 'Part of the profile data seems to be damaged. Your saved data has not been changed. You can go back home, download the data as is (for recovery), or reset this profile\'s progress.',
     exportRaw: 'Download data as is',
+    confirmLeaveSession: 'Stop the exercise? This attempt will not be saved.',
+    noPaste: 'Free typing is for typing, not pasting',
+    thInvalid: {
+      order: 'Accuracy thresholds must increase: low < middle < high ≤ 100.',
+      mastery: 'The weak key threshold must be lower than the mastered key threshold.',
+      perfect: 'Requiring 100% leaves no room for a single mistake — the maximum is 99.'
+    },
     reload: 'Reload',
     dismiss: 'Dismiss',
     importNewer: 'The file was created by a newer version of TypeGo — please update the app.',
