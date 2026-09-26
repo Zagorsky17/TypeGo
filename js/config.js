@@ -9,7 +9,12 @@ TG.CONFIG = {
   STORAGE_KEY: 'typego.v1',
   SCHEMA_VERSION: 1,
   HISTORY_LIMIT: 500,          // сколько сессий хранить в истории
+  HISTORY_EMERGENCY: 100,      // сколько оставить при переполнении хранилища
+
+  // Свои тексты: ограничения, чтобы не переполнить localStorage (≈5 МБ на все профили)
+  TEXTS: { maxChars: 20000, maxTotalChars: 150000 },
   BREAK_REMINDER_MIN: 25,      // после стольких минут за день — совет сделать перерыв (Distributed Practice)
+  BACKUP_REMINDER: { days: 7, sessions: 5 }, // напоминать сохранить прогресс в файл
 
   // Адаптивная сложность и Mastery Learning (редактируются в Настройках)
   THRESHOLDS: {

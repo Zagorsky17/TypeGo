@@ -34,7 +34,7 @@
     if (ctx.freshKeys) ctx.freshKeys.forEach(k => ctx.fresh.add(k));
     ctx.w = {};
     [...set].forEach(k => { ctx.w[k] = TG.Mastery.weight(profile, k, ctx); });
-    ctx.punct = [...set].filter(k => k.length === 1 && k !== SHIFT() && !lay.isLetter(k) && !/[0-9 ]/.test(k));
+    ctx.punct = [...set].filter(k => k.length === 1 && k !== SHIFT() && !lay.isLetter(k) && !/[0-9 ]/.test(k) && lay.byChar[k]);
     ctx.digits = [...set].filter(k => /^[0-9]$/.test(k));
     ctx.shift = set.has(SHIFT());
     ctx.maxLen = ctx.maxLen || Math.min(14, 3 + Math.ceil(ctx.level * 0.9));

@@ -3,12 +3,16 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Второй уровень защиты от XSS: только свои скрипты, без встроенных обработчиков и сети.
+       'file:' нужен, потому что на file:// источник 'self' в разных браузерах трактуется по-разному. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' file:; style-src 'self' file: 'unsafe-inline'; img-src 'self' file: data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'; base-uri 'none'; form-action 'none'">
   <title>TypeGo — тренажёр слепой печати</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%233b6cf6'/%3E%3Ctext x='16' y='22' font-size='16' font-family='Arial' font-weight='700' text-anchor='middle' fill='white'%3ETG%3C/text%3E%3C/svg%3E">
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
   <header id="header" class="header"></header>
+  <div id="banner" class="banner" role="alert" hidden></div>
   <main id="main" class="main"></main>
   <noscript><p style="padding:24px">Для работы TypeGo нужен включённый JavaScript. / TypeGo requires JavaScript.</p></noscript>
 

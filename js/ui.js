@@ -5,6 +5,9 @@
   const U = TG.Util;
   const t = (k, p) => TG.I18n.t(k, p);
   const esc = U.esc;
+  const num = (v, d) => esc(U.num(v, d)); // число из данных → безопасная строка для разметки
+  const FONT_SIZES = ['s', 'm', 'l'];
+  const fontClass = () => 'fs-' + (FONT_SIZES.indexOf(ST().fontSize) >= 0 ? ST().fontSize : 'm');
   const S = () => TG.Store.state;
   const P = () => TG.Store.profile();
   const ST = () => TG.Store.settings();
@@ -142,7 +145,7 @@
     const step = plan.steps[i];
     let ex = makeEx(step.type, null, stepMult(step.min));
     if (!ex) ex = makeEx('lesson', null);
-    ex.daily = { index: i, total: plan.steps.length };
+    ex.daily = { index: i, total: plan.steps.length, type: step.type };
     startSession(ex);
   }
 
@@ -204,7 +207,7 @@
     if (session.errBoost[key] > 0) return true;
     if (session.ex.hideHints) return false;
     if (session.ex.mode === 'lesson' && (session.ex.focusKeys || []).indexOf(key) >= 0) return true;
-    if (k === ' ') return TG.Mastery.overall(P(), LANG()) < TH().hintFadeMastery;
+    if (k === ' ') return session.overall < TH().hintFadeMastery; // считается один раз на урок
     return TG.Mastery.score(P(), key) < TH().hintFadeMastery;
   }
 
@@ -212,12 +215,11 @@
     if (session && session.engine) session.engine.abort();
     route = 'session';
     updateNav();
-    if (ex.mode === 'lesson' && ex.lesson) TG.Curriculum.introduce(P(), ex.lesson);
     if (ex.mode === 'free') { renderFree(ex); return; }
     const lang = LANG();
     const st = ST();
     const lay = TG.Layout.get(lang);
-    const fs = 'fs-' + st.fontSize;
+    const fs = fontClass();
     let brief = '';
     if (ex.mode === 'lesson' && ex.lesson.type === 'posture') {
       const home = lay.homeKeys.map(k => fmtKey(k)).join(' ');
@@ -264,7 +266,8 @@
     const inner = document.getElementById('textInner');
     const spans = [];
 
-    session = { ex, kb, fingers, spans, inner, lastPos: 0, errBoost: {}, handled: false };
+    session = { ex, kb, fingers, spans, inner, lastPos: 0, errBoost: {}, handled: false,
+      overall: TG.Mastery.overall(P(), lang), scrollQueued: false };
 
     const appendSpans = text => {
       const frag = document.createDocumentFragment();
@@ -280,6 +283,18 @@
 
     const engine = TG.Engine.create(ex, {
       lang, sound: st.sound,
+      // по нажатиям понятно, что в ОС Mac «Русская» (или «ПК»): переключить подсказки
+      onVariant: v => {
+        if (ST().ruVariant !== 'auto') return;
+        ST().ruVariantDetected = v;
+        TG.Layout.setVariant('ru', v);
+        TG.Store.save();
+        session.kb = TG.Keyboard.render(document.getElementById('kbWrap'), lang);
+        session.kb.applyStatus(P(), TH(), ST().hintsMode === 'auto');
+        const n = document.getElementById('notice');
+        n.textContent = t('variantDetected.' + v);
+        n.hidden = false;
+      },
       onChange: (s, info) => {
         if (s.text.length > spans.length) appendSpans(s.text);
         if (!info.tick) {
@@ -334,11 +349,19 @@
       sp.className = cls;
     }
     session.lastPos = s.pos;
-    const cur = spans[Math.min(s.pos, spans.length - 1)];
-    if (cur) {
-      const lh = cur.offsetHeight || 40;
-      const off = Math.max(0, cur.offsetTop - lh);
-      inner.style.transform = 'translateY(' + (-off) + 'px)';
+    // чтение offsetTop пересчитывает раскладку страницы — делаем это не чаще раза за кадр
+    if (!session.scrollQueued) {
+      session.scrollQueued = true;
+      const sess = session;
+      requestAnimationFrame(() => {
+        sess.scrollQueued = false;
+        if (session !== sess) return;
+        const cur = spans[Math.min(sess.engine ? sess.engine.state.pos : s.pos, spans.length - 1)];
+        if (!cur) return;
+        const lh = cur.offsetHeight || 40;
+        const off = Math.max(0, cur.offsetTop - lh);
+        if (off !== sess.scrollOff) { sess.scrollOff = off; inner.style.transform = 'translateY(' + (-off) + 'px)'; }
+      });
     }
   }
 
@@ -382,7 +405,7 @@
       '<div class="live"><div><span class="lbl">' + t('time') + '</span><b id="lvTime">0:00</b></div>' +
       '<div><span class="lbl">' + t('wpm') + '</span><b id="lvWpm">0</b></div>' +
       '<div><span class="lbl">' + t('corrections') + '</span><b id="lvErr">0</b></div></div>' +
-      '<textarea id="freeArea" class="free-area fs-' + ST().fontSize + '" spellcheck="false"></textarea></section>';
+      '<textarea id="freeArea" class="free-area ' + fontClass() + '" spellcheck="false"></textarea></section>';
     const area = document.getElementById('freeArea');
     const fs = { ex, startT: 0, lastT: 0, events: [], corrections: 0, timer: null };
     session = { ex, free: fs };
@@ -396,12 +419,16 @@
           document.getElementById('lvWpm').textContent = Math.round(area.value.length / 5 / Math.max(sec / 60, 1 / 60));
         }, 500);
       }
+      if (e.repeat) return; // удержание клавиши не считаем отдельными нажатиями
       if (e.key === 'Backspace') { fs.corrections++; document.getElementById('lvErr').textContent = fs.corrections; return; }
       if (e.key.length === 1) {
         fs.events.push({ ok: true, rt: fs.lastT ? now - fs.lastT : 0, t: now, got: e.key });
         fs.lastT = now;
       }
     });
+    // свободная печать — это набор, а не вставка: вставленный текст завысил бы скорость
+    area.addEventListener('paste', e => { e.preventDefault(); toast(t('noPaste')); });
+    area.addEventListener('drop', e => e.preventDefault());
     area.focus();
   }
 
@@ -426,7 +453,7 @@
     }
     const report = applyResult(ex, res, s.events);
     lastResult = { ex, res, report };
-    TG.Store.save();
+    TG.Store.saveNow(); // сразу: страницу могут закрыть или выгрузить в любой момент
     renderResults();
   }
 
@@ -468,6 +495,8 @@
 
     // урок
     if (ex.mode === 'lesson') {
+      // новые клавиши попадают в практику только после завершённой попытки урока
+      TG.Curriculum.introduce(profile, ex.lesson);
       const ev = TG.Curriculum.evaluate(ex.lesson, res, profile, lang, th);
       report.lesson = ev;
       if (ev.passed) {
@@ -500,7 +529,11 @@
     // ежедневная тренировка
     if (ex.daily) {
       const plan = dailyPlan();
-      if (plan.steps[ex.daily.index]) plan.steps[ex.daily.index].done = true;
+      // план мог пересоздаться (сменили длительность или раскладку) — ищем шаг по типу, а не только по номеру
+      const byIndex = plan.steps[ex.daily.index];
+      const step = byIndex && byIndex.type === ex.daily.type && !byIndex.done ? byIndex
+        : plan.steps.find(x => !x.done && x.type === ex.daily.type) || plan.steps.find(x => !x.done);
+      if (step) step.done = true;
       report.dailyNext = plan.steps.findIndex(x => !x.done);
       if (report.dailyNext < 0) report.msgs.push(['dailyCompleteMsg', { n: TG.Stats.currentStreak(st) }]);
     }
@@ -526,7 +559,7 @@
     if (ex.daily && report.dailyNext >= 0) nextLabel = t('nextStep', { i: report.dailyNext + 1, n: ex.daily.total });
     const speedNote = !report.speedCounted && ex.mode !== 'free'
       ? '<p class="note warn">' + t('speedNotCounted', { acc: th.minAccForSpeed }) + '</p>' : '';
-    const tile = (label, val, cls) => '<div class="metric ' + (cls || '') + '"><span class="lbl">' + label + '</span><b>' + val + '</b></div>';
+    const tile = (label, val, cls) => '<div class="metric ' + (cls || '') + '"><span class="lbl">' + esc(label) + '</span><b>' + esc(val) + '</b></div>';
     main.innerHTML =
       '<section class="results">' +
       '<div class="sess-head"><div><h2>' + t('results') + ' · ' + esc(ex.title) + '</h2></div></div>' +
@@ -599,7 +632,6 @@
     }
 
     let html = '<section class="home">';
-    if (!TG.Store.storageOk) html += '<p class="note warn">' + t('storageWarn') + '</p>';
     if (fresh) {
       html += '<div class="card hero"><h2>' + t('welcomeTitle') + '</h2><p>' + t('welcomeText') + '</p>' +
         '<div class="choice">' +
@@ -608,31 +640,38 @@
         '</div></div>';
     }
     if (todayMin >= TG.CONFIG.BREAK_REMINDER_MIN) html += '<p class="note">' + t('breakHint', { m: todayMin }) + '</p>';
+    // данные живут только в этом браузере — время от времени напоминаем сохранить их в файл
+    const R = TG.CONFIG.BACKUP_REMINDER;
+    const sinceExport = ['ru', 'en'].reduce((n, l) => n + st.profiles[l].sessions.filter(x => x.date > st.lastExport).length, 0);
+    if (sinceExport >= R.sessions && Date.now() - st.lastExport > R.days * 86400000) {
+      html += '<div class="note row wrap between"><span>' + esc(st.lastExport ? t('backupReminder', { d: dateStr(st.lastExport) }) : t('backupReminderNever')) +
+        '</span><button class="btn primary sm" data-action="save">' + esc(t('saveProgress')) + '</button></div>';
+    }
 
     // Прогресс
     html += '<div class="card progress-card"><div class="card-head"><h3>' + t('progress') + '</h3><span class="muted">' + t('stageOf', { n: stage }) + ' · ' + esc(t('stage.' + stage)) + '</span></div>' +
       '<div class="stages">' + Array.from({ length: 12 }, (_, i) => '<i class="' + (i + 1 < stage || TG.Curriculum.isComplete(profile, lang) ? 'on' : i + 1 === stage ? 'cur' : '') + '" title="' + esc(t('stage.' + (i + 1))) + '"></i>').join('') + '</div>' +
       '<div class="kpis">' +
-      '<div><b>' + done + '/' + L.length + '</b><span>' + t('lessonsDone') + '</span></div>' +
-      '<div><b>' + mastered + '/' + unlocked.length + '</b><span>' + t('keysMastered') + '</span></div>' +
-      '<div><b>' + overall + '</b><span>' + t('overallMastery') + '</span></div></div></div>';
+      '<div><b>' + num(done) + '/' + num(L.length) + '</b><span>' + t('lessonsDone') + '</span></div>' +
+      '<div><b>' + num(mastered) + '/' + num(unlocked.length) + '</b><span>' + t('keysMastered') + '</span></div>' +
+      '<div><b>' + num(overall) + '</b><span>' + t('overallMastery') + '</span></div></div></div>';
 
     // Сегодняшняя тренировка
     html += '<div class="card today"><div class="card-head"><h3>' + t('todayTraining') + '</h3><span class="muted">' +
       t('todayMinutes', { m: todayMin, g: ST().dailyMinutes }) + '</span></div>' +
       '<div class="pbar"><span style="width:' + Math.min(100, todaySec / 60 / ST().dailyMinutes * 100) + '%"></span></div>' +
-      '<ol class="steps">' + plan.steps.map(s => '<li class="' + (s.done ? 'done' : '') + '">' + esc(t('dailySteps.' + s.type)) + ' <small>~' + s.min + ' ' + (TG.I18n.lang === 'ru' ? 'мин' : 'min') + '</small></li>').join('') + '</ol>' +
+      '<ol class="steps">' + plan.steps.map(s => '<li class="' + (s.done ? 'done' : '') + '">' + esc(t('dailySteps.' + s.type)) + ' <small>~' + num(s.min) + ' ' + (TG.I18n.lang === 'ru' ? 'мин' : 'min') + '</small></li>').join('') + '</ol>' +
       '<button class="btn primary big" data-action="daily">' + (planDone ? t('dailyAgain') : plan.steps.some(s => s.done) ? t('dailyContinue') : t('dailyStart')) + '</button>' +
       (planDone ? '<p class="muted small">✓ ' + t('dailyDone') + '</p>' : '') + '</div>';
 
     // Скорость / Точность / Серия
     html += '<div class="grid3">' +
-      '<div class="card stat"><h3>' + t('speed') + '</h3><b class="big-num">' + (avg.count ? avg.wpm : '—') + ' <small>WPM</small></b>' +
-      TG.Charts.spark(hist.map(s => s.wpm), 's1') + '<span class="muted small">' + t('last10') + ' · ' + t('bestWpm', { n: profile.bestWpm || '—' }) + '</span></div>' +
-      '<div class="card stat"><h3>' + t('accuracy') + '</h3><b class="big-num">' + (avg.count ? avg.acc + '%' : '—') + '</b>' +
+      '<div class="card stat"><h3>' + t('speed') + '</h3><b class="big-num">' + (avg.count ? num(avg.wpm) : '—') + ' <small>WPM</small></b>' +
+      TG.Charts.spark(hist.map(s => s.wpm), 's1') + '<span class="muted small">' + t('last10') + ' · ' + esc(t('bestWpm', { n: U.num(profile.bestWpm) || '—' })) + '</span></div>' +
+      '<div class="card stat"><h3>' + t('accuracy') + '</h3><b class="big-num">' + (avg.count ? num(avg.acc) + '%' : '—') + '</b>' +
       TG.Charts.spark(hist.map(s => s.acc), 's2') + '<span class="muted small">' + t('last10') + '</span></div>' +
-      '<div class="card stat"><h3>' + t('streak') + '</h3><b class="big-num">' + t('streakDays', { n: streak }) + '</b>' +
-      '<div class="days">' + days.join('') + '</div><span class="muted small">' + t('streakBest', { n: st.streak.best }) + '</span></div>' +
+      '<div class="card stat"><h3>' + t('streak') + '</h3><b class="big-num">' + esc(t('streakDays', { n: U.num(streak) })) + '</b>' +
+      '<div class="days">' + days.join('') + '</div><span class="muted small">' + esc(t('streakBest', { n: U.num(st.streak.best) })) + '</span></div>' +
       '</div>';
 
     // Продолжить обучение
@@ -643,7 +682,7 @@
     } else html += '<p>' + t('allLessonsDone') + '</p><button class="btn primary" data-action="start:adaptive">' + t('mode.adaptive') + '</button>';
     if (weak.length || due.length) {
       html += '<div class="focus">';
-      if (weak.length) html += '<div><span class="muted small">' + t('weakKeysTitle') + '</span><div class="chips">' + weak.map(x => '<span class="chip bad"><kbd>' + esc(fmtKey(x.k)) + '</kbd> ' + x.s + '</span>').join('') + '</div></div>';
+      if (weak.length) html += '<div><span class="muted small">' + t('weakKeysTitle') + '</span><div class="chips">' + weak.map(x => '<span class="chip bad"><kbd>' + esc(fmtKey(x.k)) + '</kbd> ' + num(x.s) + '</span>').join('') + '</div></div>';
       if (due.length) html += '<div><span class="muted small">' + t('dueKeysTitle') + '</span><div class="chips">' + due.slice(0, 10).map(k => '<span class="chip"><kbd>' + esc(fmtKey(k)) + '</kbd></span>').join('') + '</div></div>';
       html += '</div>';
     }
@@ -676,7 +715,7 @@
         const st = i < profile.lessonIndex ? 'passed' : i === profile.lessonIndex ? 'current' : 'locked';
         const best = profile.lessonsDone[l.id] && profile.lessonsDone[l.id].best;
         html += '<li class="' + st + '">' + (st === 'locked' ? '<span>' : '<button class="lesson-link" data-action="lesson:' + i + '">') +
-          '<i></i>' + esc(lessonTitle(l)) + (best ? ' <small>' + best + ' WPM</small>' : '') +
+          '<i></i>' + esc(lessonTitle(l)) + (best ? ' <small>' + num(best) + ' WPM</small>' : '') +
           (st === 'locked' ? '</span>' : '</button>') + '</li>';
       });
       html += '</ul></div>';
@@ -704,12 +743,12 @@
     const allKeys = lay.letters.split('').concat([...TG.Curriculum.unlocked(profile, lang)].filter(k => !lay.isLetter(k) && k !== ' ' && k !== TG.Curriculum.SHIFT));
     let html = '<section class="stats"><h2>' + t('statsTitle') + ' · ' + t('layoutName.' + lang) + '</h2>' +
       '<div class="metrics">' +
-      '<div class="metric"><span class="lbl">' + t('totalTime') + '</span><b>' + (totalMin >= 60 ? Math.floor(totalMin / 60) + 'h ' + totalMin % 60 + 'm' : totalMin + ' min') + '</b></div>' +
-      '<div class="metric"><span class="lbl">' + t('totalSessions') + '</span><b>' + profile.sessions.length + '</b></div>' +
-      '<div class="metric"><span class="lbl">WPM ★</span><b>' + (profile.bestWpm || '—') + '</b></div>' +
-      '<div class="metric"><span class="lbl">' + t('avgAcc') + '</span><b>' + (avgAcc != null ? avgAcc + '%' : '—') + '</b></div>' +
-      '<div class="metric"><span class="lbl">' + t('overallMastery') + '</span><b>' + TG.Mastery.overall(profile, lang) + '</b></div>' +
-      '<div class="metric"><span class="lbl">' + t('streak') + '</span><b>' + TG.Stats.currentStreak(st) + '</b></div>' +
+      '<div class="metric"><span class="lbl">' + t('totalTime') + '</span><b>' + (totalMin >= 60 ? num(Math.floor(totalMin / 60)) + 'h ' + num(totalMin % 60) + 'm' : num(totalMin) + ' min') + '</b></div>' +
+      '<div class="metric"><span class="lbl">' + t('totalSessions') + '</span><b>' + num(profile.sessions.length) + '</b></div>' +
+      '<div class="metric"><span class="lbl">WPM ★</span><b>' + (U.num(profile.bestWpm) || '—') + '</b></div>' +
+      '<div class="metric"><span class="lbl">' + t('avgAcc') + '</span><b>' + (avgAcc != null ? num(avgAcc) + '%' : '—') + '</b></div>' +
+      '<div class="metric"><span class="lbl">' + t('overallMastery') + '</span><b>' + num(TG.Mastery.overall(profile, lang)) + '</b></div>' +
+      '<div class="metric"><span class="lbl">' + t('streak') + '</span><b>' + num(TG.Stats.currentStreak(st)) + '</b></div>' +
       '</div>' +
       '<div class="grid2">' +
       '<div class="card"><h3>' + t('speedProgress') + '</h3>' + TG.Charts.line([{ values: hist.map(s => s.wpm), cls: 's1', area: true, name: 'WPM' }], { labels, min: 0, empty: t('noData') }) + '</div>' +
@@ -725,20 +764,20 @@
         note: f.presses ? Math.round(f.errRate * 100) + '% ' + t('errRate') : ''
       }))) + '</div>' +
       '<div class="card"><h3>' + t('problemKeys') + '</h3>' +
-      (weak.length ? '<div class="chips">' + weak.map(x => '<span class="chip bad"><kbd>' + esc(fmtKey(x.k)) + '</kbd> ' + x.s + '</span>').join('') + '</div>' : '<p class="muted">' + t('noData') + '</p>') +
+      (weak.length ? '<div class="chips">' + weak.map(x => '<span class="chip bad"><kbd>' + esc(fmtKey(x.k)) + '</kbd> ' + num(x.s) + '</span>').join('') + '</div>' : '<p class="muted">' + t('noData') + '</p>') +
       '<h3>' + t('problemPairs') + '</h3>' +
-      (pairs.length ? '<div class="chips">' + pairs.map(b => '<span class="chip"><kbd>' + esc(b.k) + '</kbd> ' + Math.round(b.errRate * 100) + '% · ' + (b.rt || '—') + 'ms</span>').join('') + '</div>' : '<p class="muted">—</p>') +
+      (pairs.length ? '<div class="chips">' + pairs.map(b => '<span class="chip"><kbd>' + esc(b.k) + '</kbd> ' + num(Math.round(b.errRate * 100)) + '% · ' + (U.num(b.rt) || '—') + 'ms</span>').join('') + '</div>' : '<p class="muted">—</p>') +
       '<h3>' + t('problemSeq') + '</h3>' +
-      (seqs.length ? '<div class="chips">' + seqs.map(s => '<span class="chip"><kbd>' + esc(s.k) + '</kbd> ' + s.e + '/' + s.n + '</span>').join('') + '</div>' : '<p class="muted">—</p>') +
+      (seqs.length ? '<div class="chips">' + seqs.map(s => '<span class="chip"><kbd>' + esc(s.k) + '</kbd> ' + num(s.e) + '/' + num(s.n) + '</span>').join('') + '</div>' : '<p class="muted">—</p>') +
       '<h3>' + t('confusions') + '</h3>' +
-      (conf.length ? '<div class="chips">' + conf.map(c => '<span class="chip">' + esc(t('confusionItem', { a: fmtKey(c.got), b: fmtKey(c.exp) })) + ' ×' + c.n + '</span>').join('') + '</div>' : '<p class="muted">—</p>') +
+      (conf.length ? '<div class="chips">' + conf.map(c => '<span class="chip">' + esc(t('confusionItem', { a: fmtKey(c.got), b: fmtKey(c.exp) })) + ' ×' + num(c.n) + '</span>').join('') + '</div>' : '<p class="muted">—</p>') +
       '</div></div>' +
       '<div class="card"><h3>' + t('keyMastery') + '</h3><div class="key-grid">' +
       allKeys.map(k => {
         const s = TG.Mastery.score(profile, k);
         const status = TG.Mastery.status(profile, k, th);
         const r = profile.keys[k];
-        return '<div class="kcell st-' + status + '" title="' + esc(t('status.' + status)) + (r ? ' · ' + (r.h + r.e) + ' ' + t('hits') : '') + '"><kbd>' + esc(fmtKey(k)) + '</kbd><b>' + (r ? s : '—') + '</b></div>';
+        return '<div class="kcell st-' + status + '" title="' + esc(t('status.' + status)) + (r ? ' · ' + num(U.num(r.h) + U.num(r.e)) + ' ' + esc(t('hits')) : '') + '"><kbd>' + esc(fmtKey(k)) + '</kbd><b>' + (r ? s : '—') + '</b></div>';
       }).join('') + '</div>' +
       '<div class="legend">' + ['none', 'new', 'learning', 'good', 'mastered'].map(s => '<span class="st-' + s + '"><i></i>' + t('status.' + s) + '</span>').join('') + '</div></div>' +
       '<div class="card"><h3>' + t('history') + '</h3>' + historyTable(profile) + '</div>' +
@@ -765,8 +804,8 @@
     if (!rows.length) return '<p class="muted">' + t('noHistory') + '</p>';
     return '<div class="table-wrap"><table><thead><tr><th>' + t('date') + '</th><th>' + t('modeCol') + '</th><th>WPM</th><th>' + t('accuracy') +
       '</th><th>' + t('errors') + '</th><th>' + t('corrections') + '</th><th>' + t('reaction') + '</th><th>' + t('duration') + '</th></tr></thead><tbody>' +
-      rows.map(s => '<tr><td>' + dateStr(s.date) + '</td><td>' + esc(t('mode.' + s.mode)) + '</td><td>' + s.wpm + '</td><td>' + s.acc + '%</td><td>' +
-        s.errors + '</td><td>' + s.corrections + '</td><td>' + (s.rtAvg ? s.rtAvg + ' ms' : '—') + '</td><td>' + U.fmtTime(s.durationS) + '</td></tr>').join('') +
+      rows.map(s => '<tr><td>' + dateStr(s.date) + '</td><td>' + esc(t('mode.' + s.mode)) + '</td><td>' + num(s.wpm) + '</td><td>' + num(s.acc) + '%</td><td>' +
+        num(s.errors) + '</td><td>' + num(s.corrections) + '</td><td>' + (U.num(s.rtAvg) ? num(s.rtAvg) + ' ms' : '—') + '</td><td>' + U.fmtTime(s.durationS) + '</td></tr>').join('') +
       '</tbody></table></div>';
   }
 
@@ -776,8 +815,8 @@
     const lang = LANG();
     const list = (arr, custom) => arr.map(x => '<li class="text-item"><div><b>' + esc(x.title) + '</b><p class="muted small">' +
       esc(x.body.slice(0, 120)) + (x.body.length > 120 ? '…' : '') + '</p><span class="muted small">' + t('chars', { n: x.body.length }) + '</span></div>' +
-      '<div class="row"><button class="btn primary sm" data-action="text-type:' + x.id + '">' + t('type') + '</button>' +
-      (custom ? '<button class="btn ghost sm" data-action="text-del:' + x.id + '">' + t('remove') + '</button>' : '') + '</div></li>').join('');
+      '<div class="row"><button class="btn primary sm" data-action="text-type:' + esc(x.id) + '">' + t('type') + '</button>' +
+      (custom ? '<button class="btn ghost sm" data-action="text-del:' + esc(x.id) + '">' + t('remove') + '</button>' : '') + '</div></li>').join('');
     const custom = TG.Texts.custom(lang);
     main.innerHTML = '<section class="texts"><h2>' + t('textsTitle') + ' · ' + t('layoutName.' + lang) + '</h2><p class="muted">' + t('textsIntro') + '</p>' +
       '<div class="card"><h3>' + t('addText') + '</h3>' +
@@ -798,24 +837,25 @@
   }
 
   function renderProfiles() {
+    TG.Store.refreshIndex();
     const users = TG.Store.users();
     const curId = TG.Store.index.current;
     let html = '<section class="profiles"><h2>' + (pickerMode ? t('whoIsLearning') : t('profiles')) + '</h2>' +
-      '<p class="muted">' + t('profilesIntro') + '</p><div class="user-grid">';
+      '<p class="muted">' + t('profilesIntro') + ' ' + t('profilesPrivacy') + '</p><div class="user-grid">';
     users.forEach(u => {
       const sum = TG.Store.userSummary(u.id);
       const isCur = u.id === curId;
       const L = sum ? TG.Curriculum.lessons(sum.lang).length : 0;
       const meta = sum && sum.sessions
-        ? t('profileStats', { l: Math.min(sum.lessonIndex + 1, L) + '/' + L, s: sum.sessions, w: sum.bestWpm || '—' }) + '<br>' +
-          t('lastActive', { d: dateStr(u.lastActive) })
+        ? esc(t('profileStats', { l: Math.min(U.num(sum.lessonIndex) + 1, L) + '/' + L, s: U.num(sum.sessions), w: U.num(sum.bestWpm) || '—' })) + '<br>' +
+          esc(t('lastActive', { d: dateStr(U.num(u.lastActive)) }))
         : t('noPractice');
       html += '<div class="user-card' + (isCur ? ' on' : '') + '">' +
-        '<button class="user-main" data-action="user-select:' + u.id + '">' + avatar(u) +
+        '<button class="user-main" data-action="user-select:' + esc(u.id) + '">' + avatar(u) +
         '<span><b>' + esc(TG.Store.userName(u)) + '</b>' + (isCur ? ' <span class="tag">' + t('activeProfile') + '</span>' : '') +
         '<small class="muted">' + meta + '</small></span></button>' +
-        '<div class="row"><button class="btn link" data-action="user-rename:' + u.id + '">' + t('rename') + '</button>' +
-        (users.length > 1 ? '<button class="btn link danger-text" data-action="user-delete:' + u.id + '">' + t('remove') + '</button>' : '') +
+        '<div class="row"><button class="btn link" data-action="user-rename:' + esc(u.id) + '">' + t('rename') + '</button>' +
+        (users.length > 1 ? '<button class="btn link danger-text" data-action="user-delete:' + esc(u.id) + '">' + t('remove') + '</button>' : '') +
         '</div></div>';
     });
     html += '</div><div class="card"><h3>' + t('newProfile') + '</h3>' +
@@ -828,28 +868,80 @@
       e.preventDefault();
       const name = document.getElementById('newUserName').value.trim();
       const id = TG.Store.createUser(name);
+      if (!id) { toast(t('profileCreateFail')); return; }
       switchUser(id);
       toast(t('profileCreated', { n: TG.Store.userName() }));
     });
-    document.getElementById('userImportFile').addEventListener('change', e => {
-      const f = e.target.files[0];
-      if (!f) return;
-      const r = new FileReader();
-      r.onload = () => {
-        const id = TG.Store.importAsNewUser(String(r.result));
-        if (!id) { toast(t('importFail')); return; }
+    document.getElementById('userImportFile').addEventListener('change', e => readFile(e.target, text => {
+      const parsed = TG.Store.parseFile(text);
+      if (!parsed) { toast(importError()); return; }
+      const add = () => {
+        const id = TG.Store.importAsNewUser(text);
+        if (!id) { toast(TG.Store.parseError ? importError() : t('profileCreateFail')); return; }
         toast(t('profileImported', { n: TG.Store.userName(TG.Store.user(id)) }));
-        renderProfiles();
+        if (route === 'profiles') renderProfiles();
       };
-      r.readAsText(f);
-    });
+      const dup = parsed.name && TG.Store.users().some(u => TG.Store.userName(u) === parsed.name);
+      if (dup) confirmBox(t('confirmDuplicate', { n: parsed.name }), add);
+      else add();
+    }));
+  }
+
+  function importError() {
+    const e = TG.Store.parseError;
+    return e === 'newer' ? t('importNewer') : e === 'backup' ? t('importBackupFail') : t('importFail');
+  }
+
+  const MAX_FILE_BYTES = 10 * 1024 * 1024;
+
+  /** Прочитать выбранный JSON-файл (с ограничением размера). */
+  function readFile(input, onText) {
+    const f = input.files[0];
+    input.value = ''; // чтобы тот же файл можно было выбрать повторно
+    if (!f) return;
+    if (f.size > MAX_FILE_BYTES) { toast(t('fileTooBig')); return; }
+    const r = new FileReader();
+    r.onload = () => onText(String(r.result));
+    r.onerror = () => toast(t('importFail'));
+    r.readAsText(f);
+  }
+
+  /** Краткое описание файла прогресса для подтверждения. */
+  function fileSummary(parsed) {
+    const st = parsed.state, lang = st.settings.layoutLang;
+    const L = TG.Curriculum.lessons(lang).length;
+    return {
+      n: parsed.name || '—',
+      l: Math.min(st.profiles[lang].lessonIndex + 1, L) + '/' + L,
+      s: st.profiles.ru.sessions.length + st.profiles.en.sessions.length
+    };
+  }
+
+  /** Экран восстановления: показывается, если экран не удалось отрисовать. */
+  function renderRecovery(err) {
+    console.error('TypeGo:', err);
+    if (session && session.engine) session.engine.abort();
+    session = null;
+    route = 'recovery';
+    main.innerHTML = '<section class="card warn recovery"><h2>' + esc(t('recoveryTitle')) + '</h2><p>' + esc(t('recoveryText')) + '</p>' +
+      '<div class="row wrap gap"><button class="btn primary" data-action="nav:home">' + esc(t('toHome')) + '</button>' +
+      '<button class="btn ghost" data-action="export-raw">' + esc(t('exportRaw')) + '</button>' +
+      '<button class="btn ghost danger-text" data-action="reset-all">' + esc(t('resetBtn')) + '</button></div></section>';
   }
 
   function switchUser(id) {
-    TG.Store.switchUser(id);
+    if (!TG.Store.switchUser(id)) { toast(t('issue.conflict')); return; }
     pickerMode = false;
     TG.App.applyPrefs();
     go('home');
+  }
+
+  /** Проверка согласованности порогов. Возвращает ключ ошибки или null. */
+  function thresholdError(th) {
+    if (!(th.accLow < th.accMid && th.accMid < th.accHigh && th.accHigh <= 100)) return 'order';
+    if (!(th.weakMastery < th.masteredMastery)) return 'mastery';
+    if (th.lessonPassAcc > 99 || th.minAccForSpeed > 99) return 'perfect';
+    return null;
   }
 
   /* ---------- настройки ---------- */
@@ -863,6 +955,8 @@
       '<div class="card"><h3>' + t('general') + '</h3><div class="set-list">' +
       '<label><span>' + t('uiLanguage') + '</span>' + sel('uiLang', ['ru', 'en'], o => o === 'ru' ? 'Русский' : 'English') + '</label>' +
       '<label><span>' + t('keyboardLayout') + '</span>' + sel('layoutLang', ['ru', 'en'], o => o === 'ru' ? 'Русская (ЙЦУКЕН)' : 'English (QWERTY)') + '</label>' +
+      '<label><span>' + t('ruVariant') + '</span>' + sel('ruVariant', ['auto', 'pc', 'mac'], o => t('ruVariantOpt.' + o) +
+        (o === 'auto' ? ' — ' + t('ruVariantOpt.' + st.ruVariantDetected) : '')) + '</label>' +
       '<label><span>' + t('theme') + '</span>' + sel('theme', ['auto', 'light', 'dark'], o => t('themeOpt.' + o)) + '</label>' +
       '<label><span>' + t('dailyGoal') + '</span>' + sel('dailyMinutes', TG.CONFIG.DAILY.options, o => t('minutesShort', { n: o })) + '</label>' +
       '<label><span>' + t('fontSize') + '</span>' + sel('fontSize', ['s', 'm', 'l'], o => t('fontOpt.' + o)) + '</label>' +
@@ -879,13 +973,15 @@
       ths.map(k => {
         const d = t('th.' + k);
         return '<label><span><b>' + esc(d[0]) + '</b><small>' + esc(d[1]) + '</small></span><input type="number" min="' + (k === 'stableSessions' ? 1 : 0) +
-          '" max="' + (k === 'stableSessions' ? 10 : 100) + '" step="1" data-th="' + k + '" value="' + st.thresholds[k] + '"></label>';
+          '" max="' + (k === 'stableSessions' ? 10 : 100) + '" step="1" data-th="' + k + '" value="' + num(st.thresholds[k]) + '"></label>';
       }).join('') + '</div></div>' +
-      '<div class="card"><h3>' + t('data') + ' · ' + esc(t('currentProfileData', { n: TG.Store.userName() })) + '</h3><p class="muted">' + t('dataInfo') + '</p><div class="row wrap gap">' +
+      '<div class="card"><h3>' + t('data') + ' · ' + esc(t('currentProfileData', { n: TG.Store.userName() })) + '</h3><p class="muted">' + t('dataInfo') + '</p><p class="muted small">' + t('storageWhere') + '</p><div class="row wrap gap">' +
       '<button class="btn primary" data-action="export">' + t('exportBtn') + '</button>' +
       '<button class="btn ghost" data-action="import">' + t('importBtn') + '</button>' +
       '<button class="btn ghost danger-text" data-action="reset-layout">' + t('resetLayoutBtn') + '</button>' +
-      '<button class="btn ghost danger-text" data-action="reset-all">' + t('resetBtn') + '</button></div>' +
+      '<button class="btn ghost danger-text" data-action="reset-all">' + t('resetBtn') + '</button>' +
+      (TG.Store.backupTime() ? '<button class="btn ghost" data-action="restore-backup">' + esc(t('restoreBackup', { d: dateStr(TG.Store.backupTime()) })) + '</button>' : '') +
+      '</div>' +
       '<input type="file" id="importFile" accept=".json,application/json" hidden>' +
       '<p class="muted small">' + t('about') + '</p></div>' +
       '</section>';
@@ -895,7 +991,7 @@
       if (k === 'dailyMinutes') v = +v;
       st[k] = v;
       TG.Store.save();
-      if (k === 'uiLang' || k === 'theme' || k === 'layoutLang') TG.App.applyPrefs();
+      if (k === 'uiLang' || k === 'theme' || k === 'layoutLang' || k === 'ruVariant') TG.App.applyPrefs();
       toast(t('saved'));
     }));
     main.querySelectorAll('[data-th]').forEach(el => el.addEventListener('change', () => {
@@ -903,21 +999,22 @@
       let v = Math.round(+el.value);
       if (isNaN(v)) v = TG.CONFIG.THRESHOLDS[k];
       v = k === 'stableSessions' ? U.clamp(v, 1, 10) : U.clamp(v, 0, 100);
+      const err = thresholdError(Object.assign({}, st.thresholds, { [k]: v }));
+      if (err) { el.value = st.thresholds[k]; toast(t('thInvalid.' + err)); return; }
       st.thresholds[k] = v;
       el.value = v;
       TG.Store.save();
       toast(t('saved'));
     }));
-    document.getElementById('importFile').addEventListener('change', e => {
-      const f = e.target.files[0];
-      if (!f) return;
-      const r = new FileReader();
-      r.onload = () => {
-        if (TG.Store.importText(String(r.result))) { toast(t('importOk')); TG.App.applyPrefs(); }
-        else toast(t('importFail'));
-      };
-      r.readAsText(f);
-    });
+    document.getElementById('importFile').addEventListener('change', e => readFile(e.target, text => {
+      const parsed = TG.Store.parseFile(text);
+      if (!parsed) { toast(importError()); return; }
+      const sum = fileSummary(parsed);
+      confirmBox(t('confirmImport', { cur: TG.Store.userName(), n: sum.n, l: sum.l, s: sum.s }), () => {
+        if (TG.Store.importText(text)) { toast(t('importOk')); TG.App.applyPrefs(); }
+        else toast(importError());
+      });
+    }));
   }
 
   /* ---------- навигация и события ---------- */
@@ -935,12 +1032,31 @@
     if (location.hash !== '#' + r) history.replaceState(null, '', '#' + r);
     updateNav();
     if (r !== 'profiles') pickerMode = false;
-    ({ home: renderHome, train: renderTrain, stats: renderStats, texts: renderTexts, settings: renderSettings, profiles: renderProfiles }[r] || renderHome)();
+    try {
+      ({ home: renderHome, train: renderTrain, stats: renderStats, texts: renderTexts, settings: renderSettings, profiles: renderProfiles }[r] || renderHome)();
+    } catch (err) {
+      renderRecovery(err);
+    }
     window.scrollTo(0, 0);
   }
 
-  function onAction(action, el) {
+  /** Идёт ли тренировка, прогресс которой потеряется при уходе с экрана. */
+  function sessionInProgress() {
+    if (route !== 'session' || !session) return false;
+    if (session.engine) return !session.engine.state.finished && session.engine.state.events.length > 0;
+    if (session.free) { const a = document.getElementById('freeArea'); return !!(a && a.value.length); }
+    return false;
+  }
+
+  // действия, которые уводят с экрана тренировки
+  const LEAVING = ['nav', 'start', 'lesson', 'daily', 'layout-toggle', 'uilang-toggle', 'exit', 'restart'];
+
+  function onAction(action, el, confirmed) {
     const [cmd, arg] = [action.split(':')[0], action.split(':').slice(1).join(':')];
+    if (!confirmed && LEAVING.indexOf(cmd) >= 0 && sessionInProgress()) {
+      confirmBox(t('confirmLeaveSession'), () => onAction(action, el, true));
+      return;
+    }
     switch (cmd) {
       case 'nav': go(arg); break;
       case 'start': startKind(arg); break;
@@ -976,9 +1092,14 @@
       case 'text-del': TG.Texts.remove(arg); renderTexts(); break;
       case 'text-add': {
         const body = document.getElementById('ntBody').value;
-        if (!U.normalizeText(body)) { toast(t('textEmpty')); break; }
-        TG.Texts.add(document.getElementById('ntTitle').value, body, document.getElementById('ntLang').value);
-        toast(t('textAdded'));
+        const added = TG.Texts.add(document.getElementById('ntTitle').value, body, document.getElementById('ntLang').value);
+        if (added.error) {
+          toast(added.error === 'empty' ? t('textEmpty') : added.error === 'tooLong'
+            ? t('textTooLong', { n: TG.CONFIG.TEXTS.maxChars }) : added.error === 'mismatch'
+              ? t('textMismatch') : t('textsFull', { n: TG.CONFIG.TEXTS.maxTotalChars }));
+          break;
+        }
+        toast(added.changed ? t('textCleaned', { n: added.changed }) : t('textAdded'));
         renderTexts();
         break;
       }
@@ -987,6 +1108,7 @@
       case 'reset-th': ST().thresholds = Object.assign({}, TG.CONFIG.THRESHOLDS); TG.Store.save(); renderSettings(); toast(t('saved')); break;
       case 'reset-all': confirmBox(t('confirmReset'), () => { TG.Store.reset(true); TG.App.applyPrefs(); }); break;
       case 'reset-layout': confirmBox(t('confirmResetLayout', { l: t('layoutName.' + LANG()) }), () => {
+        TG.Store.backupCurrent();
         S().profiles[LANG()] = TG.Store.newProfile();
         S().daily = null;
         TG.Store.saveNow();
@@ -1003,6 +1125,13 @@
         break;
       }
       case 'save': TG.Store.exportFile(); toast(t('exported')); break;
+      case 'reload': location.reload(); break;
+      case 'export-raw': TG.Store.exportRaw(); break;
+      case 'restore-backup': confirmBox(t('confirmRestore'), () => {
+        if (TG.Store.restoreBackup()) { toast(t('restoreOk')); TG.App.applyPrefs(); }
+        else toast(t('restoreFail'));
+      }); break;
+      case 'dismiss-issue': TG.App.dismissIssue(arg); break;
       case 'user-select':
         if (arg === TG.Store.index.current) { pickerMode = false; go('home'); break; }
         switchUser(arg);
@@ -1033,15 +1162,20 @@
   }
 
   function onKeydown(e) {
+    if (document.querySelector('.modal-back')) return; // открыто окно — ввод не для тренировки
     if (route === 'session' && session && session.engine) {
       if (e.key === 'Escape') { e.preventDefault(); onAction('exit'); return; }
       const cur = session; // сессия может завершиться внутри keydown
-      cur.handled = cur.engine.keydown(e);
-      if (cur.handled && cur.kb) cur.kb.press(e.code);
+      try {
+        cur.handled = cur.engine.keydown(e);
+        if (cur.handled && cur.kb) cur.kb.press(e.code);
+      } catch (err) {
+        renderRecovery(err);
+      }
       return;
     }
     if (route === 'session' && session && session.free) {
-      if (e.key === 'Escape') { e.preventDefault(); go('train'); }
+      if (e.key === 'Escape') { e.preventDefault(); onAction('exit'); }
       return;
     }
     if (route === 'results' && e.key === 'Enter' && !e.target.closest('input,textarea,select,button')) {
@@ -1050,10 +1184,47 @@
     }
   }
 
+  /*
+   * Ввод с экранных клавиатур (резерв, когда keydown не сообщает символ: e.key = 'Unidentified').
+   * Android-клавиатуры часто вводят через композицию: в e.data приходит всё слово целиком
+   * («п», «пр», «при»…), поэтому в урок передаются только новые символы, а поле во время
+   * композиции не очищается (иначе она сбрасывается).
+   */
+  function feedComposition(data) {
+    const prev = session.comp || '';
+    if (data.startsWith(prev)) session.engine.inputText(data.slice(prev.length));
+    session.comp = data; // автозамена переписала слово — лишнего не вводим, продолжаем от нового
+  }
+
   function onInput(e) {
     if (e.target.id !== 'hiddenInput' || !session || !session.engine) return;
+    if (e.isComposing || (e.inputType === 'insertCompositionText' && session.comp != null)) {
+      feedComposition(e.data || '');
+      return;
+    }
+    // некоторые браузеры присылают итоговое слово ещё раз после compositionend — оно уже введено
+    if (session.compDone != null && (e.inputType === 'insertCompositionText' || e.data === session.compDone)) {
+      session.compDone = null;
+      e.target.value = '';
+      return;
+    }
     if (!session.handled && e.data) session.engine.inputText(e.data);
     session.handled = false;
+    e.target.value = '';
+  }
+
+  function onCompositionStart(e) {
+    if (e.target.id !== 'hiddenInput' || !session || !session.engine) return;
+    session.comp = '';
+    session.compDone = null;
+  }
+
+  function onCompositionEnd(e) {
+    if (e.target.id !== 'hiddenInput' || !session || !session.engine) return;
+    const final = e.data || '';
+    if (session.comp != null) feedComposition(final);
+    session.comp = null;
+    session.compDone = final;
     e.target.value = '';
   }
 
@@ -1062,11 +1233,16 @@
       main = container;
       document.addEventListener('click', e => {
         const a = e.target.closest('[data-action]');
-        if (a && !a.disabled) { onAction(a.dataset.action, a); return; }
+        if (a && !a.disabled) {
+          try { onAction(a.dataset.action, a); } catch (err) { renderRecovery(err); }
+          return;
+        }
         if (route === 'session' && session && session.engine && e.target.closest('.textbox')) focusInput();
       });
       document.addEventListener('keydown', onKeydown);
       document.addEventListener('input', onInput);
+      document.addEventListener('compositionstart', onCompositionStart);
+      document.addEventListener('compositionend', onCompositionEnd);
     },
     go,
     /** Показать выбор профиля (при запуске, если профилей несколько). */
@@ -1076,6 +1252,7 @@
       else go(route);
     },
     route: () => route,
+    renderRecovery,
     // для отладки и проверки
     _internals: { makeEx, startSession, applyResult, dailyPlan }
   };

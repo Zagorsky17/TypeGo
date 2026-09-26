@@ -21,16 +21,27 @@
       return Texts.builtin('ru').concat(Texts.builtin('en'), Texts.custom()).find(t => t.id === id);
     },
 
+    /** Добавить текст. Возвращает текст или {error: 'empty' | 'tooLong' | 'full'}. */
     add(title, body, lang) {
-      body = U.normalizeText(body);
-      if (!body) return null;
+      const L = TG.CONFIG.TEXTS;
+      lang = lang === 'en' || lang === 'ru' ? lang : (TG.Layout.detect(body) || 'ru');
+      const src = U.normalizeText(body);
+      const clean = U.typeable(src, lang);
+      body = clean.text;
+      if (!body) return { error: 'empty' };
+      // больше трети символов не набрать в этой раскладке — скорее всего, выбран не тот язык
+      if (clean.changed > src.length / 3) return { error: 'mismatch' };
+      if (body.length > L.maxChars) return { error: 'tooLong' };
+      const total = TG.Store.state.customTexts.reduce((n, x) => n + (x.body ? x.body.length : 0), 0);
+      if (total + body.length > L.maxTotalChars) return { error: 'full' };
       const t = {
         id: 'c-' + Date.now().toString(36) + U.rand(1000),
         title: (title || '').trim() || body.slice(0, 40),
-        body, lang: lang || TG.Layout.detect(body) || 'ru', added: Date.now()
+        body, lang, added: Date.now()
       };
       TG.Store.state.customTexts.push(t);
       TG.Store.save();
+      t.changed = clean.changed;
       return t;
     },
 
@@ -67,7 +78,8 @@
         i++;
       }
       profile.textPos[t.id] = i >= sents.length ? 0 : i;
-      return out;
+      // на всякий случай: в тексте (например, из импортированного файла) не должно быть ненабираемых символов
+      return U.typeable(out, t.lang || TG.Store.settings().layoutLang).text;
     },
 
     /** Подобрать текст под доступные клавиши. */
