@@ -64,7 +64,19 @@
     dueKeysTitle: 'Пора повторить',
     noData: 'Пока нет данных — начните первую тренировку',
     breakHint: 'Сегодня уже {m} мин практики. Короткие регулярные занятия эффективнее длинных — сделайте перерыв.',
-    storageWarn: 'Браузер не разрешает сохранять данные. Используйте кнопку «Сохранить прогресс», чтобы не потерять результаты.',
+    issue: {
+      quota: 'Не хватает места в хранилище браузера — результаты могут не сохраниться. Сохраните прогресс в файл и удалите большие свои тексты или лишние профили.',
+      unavailable: 'Браузер не разрешает сохранять данные (например, режим инкогнито или запрет хранилища). Прогресс пропадёт при закрытии — сохраните его в файл.',
+      corrupt: 'Часть сохранённых данных оказалась повреждена. Их копия оставлена в хранилище браузера, приложение продолжило работу.',
+      newer: 'Данные сохранены более новой версией TypeGo. Чтобы не повредить их, эта версия ничего не сохраняет — обновите приложение.',
+      conflict: 'TypeGo открыт в другой вкладке, и данные этого профиля там изменились. Сохранение здесь приостановлено, чтобы ничего не затереть — перезагрузите страницу.'
+    },
+    reload: 'Перезагрузить',
+    dismiss: 'Скрыть',
+    importNewer: 'Файл создан более новой версией TypeGo — обновите приложение.',
+    textTooLong: 'Текст слишком длинный: максимум {n} символов.',
+    textsFull: 'Места для своих текстов не осталось (всего до {n} символов) — удалите ненужные.',
+    profileCreateFail: 'Не удалось создать профиль: нет места в хранилище браузера.',
     start: 'Начать',
     open: 'Открыть',
 
@@ -374,7 +386,19 @@
     dueKeysTitle: 'Due for review',
     noData: 'No data yet — start your first session',
     breakHint: "You've practiced {m} min today. Short regular sessions work better than long ones — take a break.",
-    storageWarn: 'Your browser does not allow saving data. Use "Save progress" to keep your results.',
+    issue: {
+      quota: 'Browser storage is full — results may not be saved. Save your progress to a file and delete large custom texts or unused profiles.',
+      unavailable: 'The browser does not allow saving data (e.g. private mode or blocked storage). Progress will be lost on close — save it to a file.',
+      corrupt: 'Some saved data was corrupted. A copy was kept in browser storage and the app continued.',
+      newer: 'This data was saved by a newer version of TypeGo. To avoid damaging it, this version will not save anything — please update the app.',
+      conflict: 'TypeGo is open in another tab and this profile was changed there. Saving is paused here so nothing gets overwritten — reload the page.'
+    },
+    reload: 'Reload',
+    dismiss: 'Dismiss',
+    importNewer: 'The file was created by a newer version of TypeGo — please update the app.',
+    textTooLong: 'The text is too long: at most {n} characters.',
+    textsFull: 'No room left for custom texts (up to {n} characters in total) — delete some.',
+    profileCreateFail: 'Could not create the profile: browser storage is full.',
     start: 'Start',
     open: 'Open',
 

@@ -426,7 +426,7 @@
     }
     const report = applyResult(ex, res, s.events);
     lastResult = { ex, res, report };
-    TG.Store.save();
+    TG.Store.saveNow(); // сразу: страницу могут закрыть или выгрузить в любой момент
     renderResults();
   }
 
@@ -599,7 +599,6 @@
     }
 
     let html = '<section class="home">';
-    if (!TG.Store.storageOk) html += '<p class="note warn">' + t('storageWarn') + '</p>';
     if (fresh) {
       html += '<div class="card hero"><h2>' + t('welcomeTitle') + '</h2><p>' + t('welcomeText') + '</p>' +
         '<div class="choice">' +
@@ -798,6 +797,7 @@
   }
 
   function renderProfiles() {
+    TG.Store.refreshIndex();
     const users = TG.Store.users();
     const curId = TG.Store.index.current;
     let html = '<section class="profiles"><h2>' + (pickerMode ? t('whoIsLearning') : t('profiles')) + '</h2>' +
@@ -828,6 +828,7 @@
       e.preventDefault();
       const name = document.getElementById('newUserName').value.trim();
       const id = TG.Store.createUser(name);
+      if (!id) { toast(t('profileCreateFail')); return; }
       switchUser(id);
       toast(t('profileCreated', { n: TG.Store.userName() }));
     });
@@ -837,7 +838,7 @@
       const r = new FileReader();
       r.onload = () => {
         const id = TG.Store.importAsNewUser(String(r.result));
-        if (!id) { toast(t('importFail')); return; }
+        if (!id) { toast(importError()); return; }
         toast(t('profileImported', { n: TG.Store.userName(TG.Store.user(id)) }));
         renderProfiles();
       };
@@ -845,8 +846,12 @@
     });
   }
 
+  function importError() {
+    return TG.Store.parseError === 'newer' ? t('importNewer') : t('importFail');
+  }
+
   function switchUser(id) {
-    TG.Store.switchUser(id);
+    if (!TG.Store.switchUser(id)) { toast(t('issue.conflict')); return; }
     pickerMode = false;
     TG.App.applyPrefs();
     go('home');
@@ -914,7 +919,7 @@
       const r = new FileReader();
       r.onload = () => {
         if (TG.Store.importText(String(r.result))) { toast(t('importOk')); TG.App.applyPrefs(); }
-        else toast(t('importFail'));
+        else toast(importError());
       };
       r.readAsText(f);
     });
@@ -976,8 +981,12 @@
       case 'text-del': TG.Texts.remove(arg); renderTexts(); break;
       case 'text-add': {
         const body = document.getElementById('ntBody').value;
-        if (!U.normalizeText(body)) { toast(t('textEmpty')); break; }
-        TG.Texts.add(document.getElementById('ntTitle').value, body, document.getElementById('ntLang').value);
+        const added = TG.Texts.add(document.getElementById('ntTitle').value, body, document.getElementById('ntLang').value);
+        if (added.error) {
+          toast(added.error === 'empty' ? t('textEmpty') : added.error === 'tooLong'
+            ? t('textTooLong', { n: TG.CONFIG.TEXTS.maxChars }) : t('textsFull', { n: TG.CONFIG.TEXTS.maxTotalChars }));
+          break;
+        }
         toast(t('textAdded'));
         renderTexts();
         break;
@@ -1003,6 +1012,8 @@
         break;
       }
       case 'save': TG.Store.exportFile(); toast(t('exported')); break;
+      case 'reload': location.reload(); break;
+      case 'dismiss-issue': TG.App.dismissIssue(arg); break;
       case 'user-select':
         if (arg === TG.Store.index.current) { pickerMode = false; go('home'); break; }
         switchUser(arg);

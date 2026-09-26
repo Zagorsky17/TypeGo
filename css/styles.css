@@ -112,6 +112,15 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px s
 .tool:hover { border-color: var(--accent); }
 .tool.save { color: var(--accent); }
 
+/* ---------- баннер проблем с хранилищем ---------- */
+.banner { max-width: 1080px; margin: 12px auto 0; padding: 0 24px; display: flex; flex-direction: column; gap: 8px; }
+.banner-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  padding: 10px 14px; border-radius: 10px; background: var(--warn-soft); border: 1px solid var(--warn); font-size: 14px;
+}
+.banner-conflict, .banner-unavailable { background: var(--bad-soft); border-color: var(--bad); }
+@media (max-width: 680px) { .banner { padding: 0 16px; } }
+
 /* ---------- основное ---------- */
 .main { max-width: 1080px; margin: 0 auto; padding: 20px 24px 60px; }
 .card {

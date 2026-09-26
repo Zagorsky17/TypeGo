@@ -21,9 +21,14 @@
       return Texts.builtin('ru').concat(Texts.builtin('en'), Texts.custom()).find(t => t.id === id);
     },
 
+    /** Добавить текст. Возвращает текст или {error: 'empty' | 'tooLong' | 'full'}. */
     add(title, body, lang) {
+      const L = TG.CONFIG.TEXTS;
       body = U.normalizeText(body);
-      if (!body) return null;
+      if (!body) return { error: 'empty' };
+      if (body.length > L.maxChars) return { error: 'tooLong' };
+      const total = TG.Store.state.customTexts.reduce((n, x) => n + (x.body ? x.body.length : 0), 0);
+      if (total + body.length > L.maxTotalChars) return { error: 'full' };
       const t = {
         id: 'c-' + Date.now().toString(36) + U.rand(1000),
         title: (title || '').trim() || body.slice(0, 40),
