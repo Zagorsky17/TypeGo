@@ -1,0 +1,131 @@
+/*
+ * Встроенная библиотека текстов. Все символы можно набрать на стандартной клавиатуре
+ * (вместо длинного тире используется дефис, вместо «ёлочек» — прямые кавычки).
+ */
+window.TG = window.TG || {};
+TG.DATA = TG.DATA || {};
+
+TG.DATA.ru = TG.DATA.ru || {};
+TG.DATA.en = TG.DATA.en || {};
+
+TG.DATA.ru.sentences = [
+  'Тише едешь, дальше будешь.',
+  'Повторение - мать учения.',
+  'Без труда не выловишь и рыбку из пруда.',
+  'Дело мастера боится.',
+  'Терпение и труд все перетрут.',
+  'Век живи - век учись.',
+  'Не спеши языком, торопись делом.',
+  'Глаза боятся, а руки делают.',
+  'Кто рано встает, тому бог подает.',
+  'Любишь кататься - люби и саночки возить.',
+  'Семь раз отмерь, один раз отрежь.',
+  'Лучше поздно, чем никогда.',
+  'Утро вечера мудренее.',
+  'Сделал дело - гуляй смело.',
+  'Ученье свет, а неученье тьма.',
+  'Капля камень точит.',
+  'Под лежачий камень вода не течет.',
+  'Всякому овощу свое время.',
+  'Не откладывай на завтра то, что можно сделать сегодня.',
+  'Мой дом стоит у самой реки.',
+  'Сегодня утром шел теплый дождь.',
+  'Пальцы спокойно лежат на домашнем ряду.',
+  'Смотри на экран, а не на клавиатуру.',
+  'Точность важнее скорости.',
+  'Каждый день понемногу - и навык придет.',
+  'Мы гуляли в парке до самого вечера.',
+  'Кошка спит на теплом подоконнике.',
+  'Поезд отправляется ровно в семь часов.',
+  'Осенью листья становятся желтыми и красными.',
+  'Хорошая осанка помогает печатать дольше.',
+  'Он открыл окно, и в комнату вошел свежий воздух.',
+  'Над рекой поднимался легкий туман.',
+  'В саду выросли яблоки и груши.',
+  'Она читает книгу каждый вечер.',
+  'Ритм важнее отдельных быстрых рывков.',
+  'Руки расслаблены, плечи опущены.',
+  'Большой палец отвечает за пробел.',
+  'Ошибки - это подсказки, а не поражения.',
+  'Мастерство растет из маленьких шагов.',
+  'Внимательный взгляд замечает детали.'
+];
+
+TG.DATA.en.sentences = [
+  'Practice makes perfect.',
+  'Slow and steady wins the race.',
+  'Well begun is half done.',
+  'Actions speak louder than words.',
+  'Better late than never.',
+  'Every little bit helps.',
+  'Rome was not built in a day.',
+  'Keep your eyes on the screen.',
+  'Accuracy comes before speed.',
+  'The early bird catches the worm.',
+  'A journey of a thousand miles begins with a single step.',
+  'Measure twice and cut once.',
+  'Where there is a will, there is a way.',
+  'Knowledge is power.',
+  'Little strokes fell great oaks.',
+  'Fortune favors the prepared mind.',
+  'The best time to start is now.',
+  'Rest your fingers on the home row.',
+  'Relax your shoulders and breathe.',
+  'Each small step builds a lasting habit.',
+  'We walked along the river until sunset.',
+  'The cat sleeps on the warm window sill.',
+  'The train leaves at seven sharp.',
+  'Leaves turn yellow and red in autumn.',
+  'Good posture helps you type for longer.',
+  'She opened the window and let in fresh air.',
+  'A light fog rose above the lake.',
+  'Apples and pears grew in the garden.',
+  'He reads a book every evening.',
+  'Rhythm matters more than bursts of speed.',
+  'Your thumbs take care of the space bar.',
+  'Mistakes are hints, not failures.',
+  'Mastery grows from small steps.',
+  'A careful eye notices the details.',
+  'The quick brown fox jumps over the lazy dog.',
+  'Pack my box with five dozen liquor jugs.',
+  'How vexingly quick daft zebras jump.',
+  'Sphinx of black quartz, judge my vow.',
+  'Bright stars filled the quiet night sky.',
+  'Fresh bread smells wonderful in the morning.'
+];
+
+TG.DATA.ru.texts = [
+  { id: 'ru-t1', title: 'Утро в деревне', body: 'Солнце поднималось над лесом медленно и спокойно. Роса блестела на траве, а над рекой еще держался легкий туман. Где-то вдалеке лаяла собака, и петух уже третий раз объявлял начало дня. Бабушка вынесла на крыльцо самовар, и запах свежего хлеба смешался с запахом скошенной травы.' },
+  { id: 'ru-t2', title: 'О навыке', body: 'Любой навык растет из повторения. Сначала движения кажутся неловкими, пальцы путаются, а глаза сами тянутся к клавиатуре. Но через несколько дней регулярной практики руки начинают помнить дорогу. Главное - не гнаться за скоростью, а делать каждое движение точно. Скорость придет сама, когда исчезнут лишние ошибки.' },
+  { id: 'ru-t3', title: 'Город вечером', body: 'Вечером город меняется. Зажигаются фонари, окна домов становятся теплыми желтыми квадратами, а улицы наполняются людьми, которые спешат домой. В кафе на углу играет тихая музыка. Кто-то читает книгу, кто-то пишет письмо, а кто-то просто смотрит в окно и думает о своем.' },
+  { id: 'ru-t4', title: 'Море', body: 'Море было спокойным и почти прозрачным. У самого берега плавали маленькие рыбки, а чуть дальше вода становилась темно-синей. Ветер приносил запах соли и водорослей. Мы сидели на теплых камнях, слушали шум волн и никуда не торопились.' },
+  { id: 'ru-t5', title: 'Осень', body: 'Осень пришла незаметно. Сначала пожелтели березы, потом покраснели клены, а однажды утром на лужах появился тонкий лед. Птицы собирались в стаи и улетали на юг. В лесу пахло грибами и мокрыми листьями, и каждый шаг отзывался тихим шорохом.' },
+  { id: 'ru-t6', title: 'Правильная посадка', body: 'Сядьте прямо, но без напряжения. Стопы стоят на полу, колени согнуты примерно под прямым углом. Экран находится на уровне глаз, на расстоянии вытянутой руки. Локти опущены, запястья не лежат на столе, а свободно висят над клавиатурой. Пальцы слегка согнуты и мягко касаются клавиш домашнего ряда.' },
+  { id: 'ru-t7', title: 'Библиотека', body: 'В старой библиотеке всегда было тихо. Высокие полки уходили под самый потолок, а в воздухе пахло бумагой и пылью. Читатели говорили шепотом, и даже часы на стене тикали как будто вполголоса. Здесь можно было провести целый день и не заметить, как наступил вечер.' },
+  { id: 'ru-t8', title: 'Путешествие', body: 'Поезд шел на восток уже вторые сутки. За окном сменялись поля, леса, маленькие станции и широкие реки. Пассажиры пили чай из стаканов в металлических подстаканниках, играли в карты и рассказывали друг другу истории. Каждый вез с собой свои планы, надежды и воспоминания.' },
+  { id: 'ru-t9', title: 'Мастерская', body: 'В мастерской пахло деревом и лаком. Мастер работал неторопливо: сначала долго рассматривал доску, потом делал несколько точных движений рубанком и снова рассматривал. Он говорил, что спешка портит любую работу. Хорошая вещь рождается из внимания, терпения и уважения к материалу.' },
+  { id: 'ru-t10', title: 'Зимний вечер', body: 'За окном тихо падал снег. В печке потрескивали дрова, на столе горела лампа, и тени мягко двигались по стенам. Кот свернулся клубком на старом кресле. Было так спокойно, что казалось, будто весь мир остановился и ждет, когда закончится эта длинная зимняя ночь.' },
+  { id: 'ru-t11', title: 'Наука и терпение', body: 'Многие открытия кажутся случайными, но за каждым из них стоят годы труда. Ученые проводят сотни опытов, записывают результаты, ошибаются и начинают заново. Настоящий прогресс редко бывает быстрым. Он складывается из множества маленьких шагов, каждый из которых делает картину немного яснее.' },
+  { id: 'ru-t12', title: 'Сад', body: 'Весной сад просыпается раньше всех. На яблонях появляются белые цветы, над ними кружат пчелы, а в траве распускаются одуванчики. Садовник обходит деревья, проверяет каждую ветку и радуется новым почкам. Он знает, что осенью этот труд вернется урожаем.' },
+  { id: 'ru-t13', title: 'Горы', body: 'Тропа поднималась все выше. Воздух становился прохладнее, а дыхание - чаще. Внизу остались деревья, и вокруг были только камни, мох и небо. Когда мы наконец вышли на перевал, перед нами открылась долина, залитая солнцем. Ради этого вида стоило идти целый день.' },
+  { id: 'ru-t14', title: 'Цифры', body: 'В 2024 году в городе было 15 библиотек, 42 школы и 7 театров. За 12 месяцев библиотеки посетили 356 000 человек. Самый популярный зал работал с 9:00 до 21:00, а в выходные - с 10:00 до 18:00. Средний читатель брал 3 книги в месяц.' },
+  { id: 'ru-t15', title: 'Письмо другу', body: 'Привет! Как ты там? У нас все хорошо: дети ходят в школу, я много работаю, а по выходным мы ездим на дачу. Недавно я начал учиться слепой печати. Сначала было трудно, но теперь я печатаю быстрее, чем раньше, и почти не смотрю на клавиатуру. Пиши, как дела!' }
+];
+
+TG.DATA.en.texts = [
+  { id: 'en-t1', title: 'Morning in the Village', body: 'The sun rose slowly over the forest. Dew sparkled on the grass, and a light mist still hung above the river. Somewhere in the distance a dog was barking, and the rooster announced the start of the day for the third time. Grandmother carried the kettle to the porch, and the smell of fresh bread mixed with the scent of cut grass.' },
+  { id: 'en-t2', title: 'On Skill', body: 'Every skill grows from repetition. At first the movements feel clumsy, the fingers get tangled, and the eyes keep drifting down to the keyboard. But after a few days of regular practice, the hands begin to remember the way. The key is not to chase speed, but to make every movement precise. Speed will come by itself once the extra mistakes disappear.' },
+  { id: 'en-t3', title: 'The City at Night', body: 'In the evening the city changes. Street lamps light up, windows become warm yellow squares, and the streets fill with people hurrying home. Quiet music plays in the corner cafe. Someone is reading a book, someone is writing a letter, and someone is simply looking out of the window, lost in thought.' },
+  { id: 'en-t4', title: 'The Sea', body: 'The sea was calm and almost transparent. Small fish swam near the shore, and a little farther out the water turned deep blue. The wind carried the smell of salt and seaweed. We sat on the warm stones, listened to the waves, and were in no hurry to go anywhere.' },
+  { id: 'en-t5', title: 'Autumn', body: 'Autumn arrived quietly. First the birches turned yellow, then the maples turned red, and one morning thin ice appeared on the puddles. Birds gathered in flocks and flew south. The forest smelled of mushrooms and wet leaves, and every step made a soft rustling sound.' },
+  { id: 'en-t6', title: 'Correct Posture', body: 'Sit up straight, but without tension. Keep your feet flat on the floor and your knees bent at about a right angle. The screen should be at eye level, about an arm\'s length away. Keep your elbows low and your wrists off the desk, floating above the keyboard. Curve your fingers slightly and rest them gently on the home row.' },
+  { id: 'en-t7', title: 'The Library', body: 'The old library was always quiet. Tall shelves reached up to the ceiling, and the air smelled of paper and dust. Readers spoke in whispers, and even the clock on the wall seemed to tick more softly. You could spend a whole day there and never notice that evening had come.' },
+  { id: 'en-t8', title: 'The Journey', body: 'The train had been heading east for two days. Fields, forests, small stations, and wide rivers passed by the window. Passengers drank tea, played cards, and told each other stories. Everyone carried their own plans, hopes, and memories.' },
+  { id: 'en-t9', title: 'The Workshop', body: 'The workshop smelled of wood and varnish. The master worked without hurry: first he studied the board for a long time, then made a few precise strokes with the plane, and studied it again. He used to say that haste ruins any work. A good thing is born from attention, patience, and respect for the material.' },
+  { id: 'en-t10', title: 'Winter Evening', body: 'Snow was falling quietly outside. Logs crackled in the stove, a lamp glowed on the table, and shadows moved softly across the walls. The cat curled up on the old armchair. It was so peaceful that it seemed the whole world had stopped to wait for the long winter night to end.' },
+  { id: 'en-t11', title: 'Science and Patience', body: 'Many discoveries look accidental, but behind each of them stand years of work. Scientists run hundreds of experiments, record the results, make mistakes, and start again. Real progress is rarely fast. It is built from many small steps, and each one makes the picture a little clearer.' },
+  { id: 'en-t12', title: 'The Garden', body: 'In spring the garden wakes up before anything else. White blossoms appear on the apple trees, bees circle above them, and dandelions open in the grass. The gardener walks among the trees, checks every branch, and is glad to see new buds. He knows that in autumn this work will return as a harvest.' },
+  { id: 'en-t13', title: 'The Mountains', body: 'The trail climbed higher and higher. The air grew cooler and our breathing faster. The trees were left behind, and around us there were only rocks, moss, and sky. When we finally reached the pass, a sunlit valley opened up before us. That view was worth a whole day of walking.' },
+  { id: 'en-t14', title: 'Numbers', body: 'In 2024 the city had 15 libraries, 42 schools, and 7 theaters. Over 12 months, 356,000 people visited the libraries. The most popular hall was open from 9:00 to 21:00, and on weekends from 10:00 to 18:00. The average reader borrowed 3 books a month, and 25% of them were students.' },
+  { id: 'en-t15', title: 'A Letter to a Friend', body: 'Hi! How are you doing? Everything is fine here: the kids go to school, I work a lot, and on weekends we go to the countryside. Recently I started learning to touch type. It was hard at first, but now I type faster than before and hardly ever look at the keyboard. Write back soon!' }
+];
