@@ -399,6 +399,7 @@
           document.getElementById('lvWpm').textContent = Math.round(area.value.length / 5 / Math.max(sec / 60, 1 / 60));
         }, 500);
       }
+      if (e.repeat) return; // удержание клавиши не считаем отдельными нажатиями
       if (e.key === 'Backspace') { fs.corrections++; document.getElementById('lvErr').textContent = fs.corrections; return; }
       if (e.key.length === 1) {
         fs.events.push({ ok: true, rt: fs.lastT ? now - fs.lastT : 0, t: now, got: e.key });

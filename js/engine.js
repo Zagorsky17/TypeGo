@@ -33,6 +33,7 @@
       finished: false,
       mismatchNotified: false,
       lastErrorChar: null,
+      codeMode: false,     // раскладка ОС отличается от урока — символ определяется по физической клавише
       timer: null
     };
 
@@ -54,20 +55,40 @@
       }, 250);
     }
 
-    /** Преобразовать нажатие в символ текущей раскладки (если в ОС включена другая). */
+    /**
+     * Преобразовать нажатие в символ раскладки урока.
+     * Если в ОС включена другая раскладка, символ определяется по физической клавише (e.code).
+     * Раскладку ОС выдаёт любая буква; знаки препинания есть в обеих раскладках, поэтому по ним
+     * одним ничего не понять — для них, пока раскладка неизвестна, засчитывается физически верная клавиша.
+     */
     function resolveChar(e) {
-      let ch = e.key;
-      if (ch && ch.length === 1 && lay.byChar[ch]) return { ch };
+      const key = e.key;
+      if (!key || key.length !== 1) return { ch: null };
       const map = lay.byCode[e.code];
-      if (map && ch && ch.length === 1) {
-        return { ch: e.shiftKey ? map.s : map.n, mapped: true };
+      const mapped = map ? (e.shiftKey ? map.s : map.n) : null;
+      const src = TG.Layout.detect(key);
+      if (src) s.codeMode = src !== opts.lang && !!map;
+      if (s.codeMode && mapped) return { ch: mapped, mapped: true };
+      if (lay.byChar[key]) {
+        const exp = s.text[s.pos];
+        if (key !== exp && mapped === exp) {
+          s.codeMode = true; // символ другой раскладки на физически верной клавише
+          return { ch: mapped, mapped: true };
+        }
+        return { ch: key };
       }
-      return { ch: ch && ch.length === 1 ? ch : null };
+      if (mapped) return { ch: mapped, mapped: true };
+      return { ch: key };
     }
 
     function press(ch, mapped) {
       if (s.finished || !ch) return;
       const t = now();
+      // время теста вышло, а таймер ещё не сработал (или вкладка была в фоне) — нажатие не считаем
+      if (ex.timeLimit && s.startT && t - s.startT >= ex.timeLimit * 1000) {
+        finish(s.startT + ex.timeLimit * 1000);
+        return;
+      }
       if (!s.startT) { s.startT = t; startTimer(); }
       const rt = s.lastT ? t - s.lastT : 0;
       s.lastT = t;
@@ -130,7 +151,10 @@
     return {
       state: s,
       keydown(e) {
-        if (e.ctrlKey || e.metaKey || e.altKey && !e.getModifierState('AltGraph')) return false;
+        // AltGr на Windows приходит как Ctrl+Alt — такие символы нужно пропускать
+        const altGr = !!(e.getModifierState && e.getModifierState('AltGraph'));
+        if (e.metaKey || (!altGr && (e.ctrlKey || e.altKey))) return false;
+        if (e.repeat) { e.preventDefault(); return true; } // удержание клавиши — не новое нажатие
         if (e.key === 'Backspace') { e.preventDefault(); backspace(); return true; }
         if (e.key === 'Dead' || e.key === 'Process' || e.key === 'Unidentified') return false;
         if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); return true; }
