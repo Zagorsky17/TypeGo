@@ -289,8 +289,17 @@
   }
 
   function validIndex(x) {
-    return x && typeof x === 'object' && Array.isArray(x.users) && x.users.length > 0 &&
-      x.users.every(u => u && typeof u.id === 'string' && USER_KEY_RE.test(userKey(u.id)));
+    if (!(x && typeof x === 'object' && Array.isArray(x.users) && x.users.length > 0 &&
+      x.users.every(u => u && typeof u.id === 'string' && USER_KEY_RE.test(userKey(u.id))))) return false;
+    // привести поля к допустимым значениям: имя и цвет попадают в разметку
+    x.users.forEach((u, i) => {
+      u.name = typeof u.name === 'string' ? u.name.slice(0, 40) : '';
+      if (typeof u.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(u.color)) u.color = COLORS[i % COLORS.length];
+      u.createdAt = num(u.createdAt, 0, 0);
+      u.lastActive = num(u.lastActive, 0, 0);
+    });
+    if (typeof x.current !== 'string') x.current = x.users[0].id;
+    return true;
   }
 
   /** Восстановить индекс по сохранённым ключам пользователей. */

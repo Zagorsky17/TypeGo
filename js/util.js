@@ -58,6 +58,11 @@ TG.Util = {
     return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
   },
 
+  /** Число для вывода: конечное число или значение по умолчанию (защита разметки от строк из данных). */
+  num(v, d) {
+    return typeof v === 'number' && isFinite(v) ? v : (d === undefined ? 0 : d);
+  },
+
   esc(s) {
     return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   },

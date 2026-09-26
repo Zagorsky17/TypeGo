@@ -5,6 +5,9 @@
   const U = TG.Util;
   const t = (k, p) => TG.I18n.t(k, p);
   const esc = U.esc;
+  const num = (v, d) => esc(U.num(v, d)); // число из данных → безопасная строка для разметки
+  const FONT_SIZES = ['s', 'm', 'l'];
+  const fontClass = () => 'fs-' + (FONT_SIZES.indexOf(ST().fontSize) >= 0 ? ST().fontSize : 'm');
   const S = () => TG.Store.state;
   const P = () => TG.Store.profile();
   const ST = () => TG.Store.settings();
@@ -217,7 +220,7 @@
     const lang = LANG();
     const st = ST();
     const lay = TG.Layout.get(lang);
-    const fs = 'fs-' + st.fontSize;
+    const fs = fontClass();
     let brief = '';
     if (ex.mode === 'lesson' && ex.lesson.type === 'posture') {
       const home = lay.homeKeys.map(k => fmtKey(k)).join(' ');
@@ -382,7 +385,7 @@
       '<div class="live"><div><span class="lbl">' + t('time') + '</span><b id="lvTime">0:00</b></div>' +
       '<div><span class="lbl">' + t('wpm') + '</span><b id="lvWpm">0</b></div>' +
       '<div><span class="lbl">' + t('corrections') + '</span><b id="lvErr">0</b></div></div>' +
-      '<textarea id="freeArea" class="free-area fs-' + ST().fontSize + '" spellcheck="false"></textarea></section>';
+      '<textarea id="freeArea" class="free-area ' + fontClass() + '" spellcheck="false"></textarea></section>';
     const area = document.getElementById('freeArea');
     const fs = { ex, startT: 0, lastT: 0, events: [], corrections: 0, timer: null };
     session = { ex, free: fs };
@@ -526,7 +529,7 @@
     if (ex.daily && report.dailyNext >= 0) nextLabel = t('nextStep', { i: report.dailyNext + 1, n: ex.daily.total });
     const speedNote = !report.speedCounted && ex.mode !== 'free'
       ? '<p class="note warn">' + t('speedNotCounted', { acc: th.minAccForSpeed }) + '</p>' : '';
-    const tile = (label, val, cls) => '<div class="metric ' + (cls || '') + '"><span class="lbl">' + label + '</span><b>' + val + '</b></div>';
+    const tile = (label, val, cls) => '<div class="metric ' + (cls || '') + '"><span class="lbl">' + esc(label) + '</span><b>' + esc(val) + '</b></div>';
     main.innerHTML =
       '<section class="results">' +
       '<div class="sess-head"><div><h2>' + t('results') + ' · ' + esc(ex.title) + '</h2></div></div>' +
@@ -612,26 +615,26 @@
     html += '<div class="card progress-card"><div class="card-head"><h3>' + t('progress') + '</h3><span class="muted">' + t('stageOf', { n: stage }) + ' · ' + esc(t('stage.' + stage)) + '</span></div>' +
       '<div class="stages">' + Array.from({ length: 12 }, (_, i) => '<i class="' + (i + 1 < stage || TG.Curriculum.isComplete(profile, lang) ? 'on' : i + 1 === stage ? 'cur' : '') + '" title="' + esc(t('stage.' + (i + 1))) + '"></i>').join('') + '</div>' +
       '<div class="kpis">' +
-      '<div><b>' + done + '/' + L.length + '</b><span>' + t('lessonsDone') + '</span></div>' +
-      '<div><b>' + mastered + '/' + unlocked.length + '</b><span>' + t('keysMastered') + '</span></div>' +
-      '<div><b>' + overall + '</b><span>' + t('overallMastery') + '</span></div></div></div>';
+      '<div><b>' + num(done) + '/' + num(L.length) + '</b><span>' + t('lessonsDone') + '</span></div>' +
+      '<div><b>' + num(mastered) + '/' + num(unlocked.length) + '</b><span>' + t('keysMastered') + '</span></div>' +
+      '<div><b>' + num(overall) + '</b><span>' + t('overallMastery') + '</span></div></div></div>';
 
     // Сегодняшняя тренировка
     html += '<div class="card today"><div class="card-head"><h3>' + t('todayTraining') + '</h3><span class="muted">' +
       t('todayMinutes', { m: todayMin, g: ST().dailyMinutes }) + '</span></div>' +
       '<div class="pbar"><span style="width:' + Math.min(100, todaySec / 60 / ST().dailyMinutes * 100) + '%"></span></div>' +
-      '<ol class="steps">' + plan.steps.map(s => '<li class="' + (s.done ? 'done' : '') + '">' + esc(t('dailySteps.' + s.type)) + ' <small>~' + s.min + ' ' + (TG.I18n.lang === 'ru' ? 'мин' : 'min') + '</small></li>').join('') + '</ol>' +
+      '<ol class="steps">' + plan.steps.map(s => '<li class="' + (s.done ? 'done' : '') + '">' + esc(t('dailySteps.' + s.type)) + ' <small>~' + num(s.min) + ' ' + (TG.I18n.lang === 'ru' ? 'мин' : 'min') + '</small></li>').join('') + '</ol>' +
       '<button class="btn primary big" data-action="daily">' + (planDone ? t('dailyAgain') : plan.steps.some(s => s.done) ? t('dailyContinue') : t('dailyStart')) + '</button>' +
       (planDone ? '<p class="muted small">✓ ' + t('dailyDone') + '</p>' : '') + '</div>';
 
     // Скорость / Точность / Серия
     html += '<div class="grid3">' +
-      '<div class="card stat"><h3>' + t('speed') + '</h3><b class="big-num">' + (avg.count ? avg.wpm : '—') + ' <small>WPM</small></b>' +
-      TG.Charts.spark(hist.map(s => s.wpm), 's1') + '<span class="muted small">' + t('last10') + ' · ' + t('bestWpm', { n: profile.bestWpm || '—' }) + '</span></div>' +
-      '<div class="card stat"><h3>' + t('accuracy') + '</h3><b class="big-num">' + (avg.count ? avg.acc + '%' : '—') + '</b>' +
+      '<div class="card stat"><h3>' + t('speed') + '</h3><b class="big-num">' + (avg.count ? num(avg.wpm) : '—') + ' <small>WPM</small></b>' +
+      TG.Charts.spark(hist.map(s => s.wpm), 's1') + '<span class="muted small">' + t('last10') + ' · ' + esc(t('bestWpm', { n: U.num(profile.bestWpm) || '—' })) + '</span></div>' +
+      '<div class="card stat"><h3>' + t('accuracy') + '</h3><b class="big-num">' + (avg.count ? num(avg.acc) + '%' : '—') + '</b>' +
       TG.Charts.spark(hist.map(s => s.acc), 's2') + '<span class="muted small">' + t('last10') + '</span></div>' +
-      '<div class="card stat"><h3>' + t('streak') + '</h3><b class="big-num">' + t('streakDays', { n: streak }) + '</b>' +
-      '<div class="days">' + days.join('') + '</div><span class="muted small">' + t('streakBest', { n: st.streak.best }) + '</span></div>' +
+      '<div class="card stat"><h3>' + t('streak') + '</h3><b class="big-num">' + esc(t('streakDays', { n: U.num(streak) })) + '</b>' +
+      '<div class="days">' + days.join('') + '</div><span class="muted small">' + esc(t('streakBest', { n: U.num(st.streak.best) })) + '</span></div>' +
       '</div>';
 
     // Продолжить обучение
@@ -642,7 +645,7 @@
     } else html += '<p>' + t('allLessonsDone') + '</p><button class="btn primary" data-action="start:adaptive">' + t('mode.adaptive') + '</button>';
     if (weak.length || due.length) {
       html += '<div class="focus">';
-      if (weak.length) html += '<div><span class="muted small">' + t('weakKeysTitle') + '</span><div class="chips">' + weak.map(x => '<span class="chip bad"><kbd>' + esc(fmtKey(x.k)) + '</kbd> ' + x.s + '</span>').join('') + '</div></div>';
+      if (weak.length) html += '<div><span class="muted small">' + t('weakKeysTitle') + '</span><div class="chips">' + weak.map(x => '<span class="chip bad"><kbd>' + esc(fmtKey(x.k)) + '</kbd> ' + num(x.s) + '</span>').join('') + '</div></div>';
       if (due.length) html += '<div><span class="muted small">' + t('dueKeysTitle') + '</span><div class="chips">' + due.slice(0, 10).map(k => '<span class="chip"><kbd>' + esc(fmtKey(k)) + '</kbd></span>').join('') + '</div></div>';
       html += '</div>';
     }
@@ -675,7 +678,7 @@
         const st = i < profile.lessonIndex ? 'passed' : i === profile.lessonIndex ? 'current' : 'locked';
         const best = profile.lessonsDone[l.id] && profile.lessonsDone[l.id].best;
         html += '<li class="' + st + '">' + (st === 'locked' ? '<span>' : '<button class="lesson-link" data-action="lesson:' + i + '">') +
-          '<i></i>' + esc(lessonTitle(l)) + (best ? ' <small>' + best + ' WPM</small>' : '') +
+          '<i></i>' + esc(lessonTitle(l)) + (best ? ' <small>' + num(best) + ' WPM</small>' : '') +
           (st === 'locked' ? '</span>' : '</button>') + '</li>';
       });
       html += '</ul></div>';
@@ -703,12 +706,12 @@
     const allKeys = lay.letters.split('').concat([...TG.Curriculum.unlocked(profile, lang)].filter(k => !lay.isLetter(k) && k !== ' ' && k !== TG.Curriculum.SHIFT));
     let html = '<section class="stats"><h2>' + t('statsTitle') + ' · ' + t('layoutName.' + lang) + '</h2>' +
       '<div class="metrics">' +
-      '<div class="metric"><span class="lbl">' + t('totalTime') + '</span><b>' + (totalMin >= 60 ? Math.floor(totalMin / 60) + 'h ' + totalMin % 60 + 'm' : totalMin + ' min') + '</b></div>' +
-      '<div class="metric"><span class="lbl">' + t('totalSessions') + '</span><b>' + profile.sessions.length + '</b></div>' +
-      '<div class="metric"><span class="lbl">WPM ★</span><b>' + (profile.bestWpm || '—') + '</b></div>' +
-      '<div class="metric"><span class="lbl">' + t('avgAcc') + '</span><b>' + (avgAcc != null ? avgAcc + '%' : '—') + '</b></div>' +
-      '<div class="metric"><span class="lbl">' + t('overallMastery') + '</span><b>' + TG.Mastery.overall(profile, lang) + '</b></div>' +
-      '<div class="metric"><span class="lbl">' + t('streak') + '</span><b>' + TG.Stats.currentStreak(st) + '</b></div>' +
+      '<div class="metric"><span class="lbl">' + t('totalTime') + '</span><b>' + (totalMin >= 60 ? num(Math.floor(totalMin / 60)) + 'h ' + num(totalMin % 60) + 'm' : num(totalMin) + ' min') + '</b></div>' +
+      '<div class="metric"><span class="lbl">' + t('totalSessions') + '</span><b>' + num(profile.sessions.length) + '</b></div>' +
+      '<div class="metric"><span class="lbl">WPM ★</span><b>' + (U.num(profile.bestWpm) || '—') + '</b></div>' +
+      '<div class="metric"><span class="lbl">' + t('avgAcc') + '</span><b>' + (avgAcc != null ? num(avgAcc) + '%' : '—') + '</b></div>' +
+      '<div class="metric"><span class="lbl">' + t('overallMastery') + '</span><b>' + num(TG.Mastery.overall(profile, lang)) + '</b></div>' +
+      '<div class="metric"><span class="lbl">' + t('streak') + '</span><b>' + num(TG.Stats.currentStreak(st)) + '</b></div>' +
       '</div>' +
       '<div class="grid2">' +
       '<div class="card"><h3>' + t('speedProgress') + '</h3>' + TG.Charts.line([{ values: hist.map(s => s.wpm), cls: 's1', area: true, name: 'WPM' }], { labels, min: 0, empty: t('noData') }) + '</div>' +
@@ -724,20 +727,20 @@
         note: f.presses ? Math.round(f.errRate * 100) + '% ' + t('errRate') : ''
       }))) + '</div>' +
       '<div class="card"><h3>' + t('problemKeys') + '</h3>' +
-      (weak.length ? '<div class="chips">' + weak.map(x => '<span class="chip bad"><kbd>' + esc(fmtKey(x.k)) + '</kbd> ' + x.s + '</span>').join('') + '</div>' : '<p class="muted">' + t('noData') + '</p>') +
+      (weak.length ? '<div class="chips">' + weak.map(x => '<span class="chip bad"><kbd>' + esc(fmtKey(x.k)) + '</kbd> ' + num(x.s) + '</span>').join('') + '</div>' : '<p class="muted">' + t('noData') + '</p>') +
       '<h3>' + t('problemPairs') + '</h3>' +
-      (pairs.length ? '<div class="chips">' + pairs.map(b => '<span class="chip"><kbd>' + esc(b.k) + '</kbd> ' + Math.round(b.errRate * 100) + '% · ' + (b.rt || '—') + 'ms</span>').join('') + '</div>' : '<p class="muted">—</p>') +
+      (pairs.length ? '<div class="chips">' + pairs.map(b => '<span class="chip"><kbd>' + esc(b.k) + '</kbd> ' + num(Math.round(b.errRate * 100)) + '% · ' + (U.num(b.rt) || '—') + 'ms</span>').join('') + '</div>' : '<p class="muted">—</p>') +
       '<h3>' + t('problemSeq') + '</h3>' +
-      (seqs.length ? '<div class="chips">' + seqs.map(s => '<span class="chip"><kbd>' + esc(s.k) + '</kbd> ' + s.e + '/' + s.n + '</span>').join('') + '</div>' : '<p class="muted">—</p>') +
+      (seqs.length ? '<div class="chips">' + seqs.map(s => '<span class="chip"><kbd>' + esc(s.k) + '</kbd> ' + num(s.e) + '/' + num(s.n) + '</span>').join('') + '</div>' : '<p class="muted">—</p>') +
       '<h3>' + t('confusions') + '</h3>' +
-      (conf.length ? '<div class="chips">' + conf.map(c => '<span class="chip">' + esc(t('confusionItem', { a: fmtKey(c.got), b: fmtKey(c.exp) })) + ' ×' + c.n + '</span>').join('') + '</div>' : '<p class="muted">—</p>') +
+      (conf.length ? '<div class="chips">' + conf.map(c => '<span class="chip">' + esc(t('confusionItem', { a: fmtKey(c.got), b: fmtKey(c.exp) })) + ' ×' + num(c.n) + '</span>').join('') + '</div>' : '<p class="muted">—</p>') +
       '</div></div>' +
       '<div class="card"><h3>' + t('keyMastery') + '</h3><div class="key-grid">' +
       allKeys.map(k => {
         const s = TG.Mastery.score(profile, k);
         const status = TG.Mastery.status(profile, k, th);
         const r = profile.keys[k];
-        return '<div class="kcell st-' + status + '" title="' + esc(t('status.' + status)) + (r ? ' · ' + (r.h + r.e) + ' ' + t('hits') : '') + '"><kbd>' + esc(fmtKey(k)) + '</kbd><b>' + (r ? s : '—') + '</b></div>';
+        return '<div class="kcell st-' + status + '" title="' + esc(t('status.' + status)) + (r ? ' · ' + num(U.num(r.h) + U.num(r.e)) + ' ' + esc(t('hits')) : '') + '"><kbd>' + esc(fmtKey(k)) + '</kbd><b>' + (r ? s : '—') + '</b></div>';
       }).join('') + '</div>' +
       '<div class="legend">' + ['none', 'new', 'learning', 'good', 'mastered'].map(s => '<span class="st-' + s + '"><i></i>' + t('status.' + s) + '</span>').join('') + '</div></div>' +
       '<div class="card"><h3>' + t('history') + '</h3>' + historyTable(profile) + '</div>' +
@@ -764,8 +767,8 @@
     if (!rows.length) return '<p class="muted">' + t('noHistory') + '</p>';
     return '<div class="table-wrap"><table><thead><tr><th>' + t('date') + '</th><th>' + t('modeCol') + '</th><th>WPM</th><th>' + t('accuracy') +
       '</th><th>' + t('errors') + '</th><th>' + t('corrections') + '</th><th>' + t('reaction') + '</th><th>' + t('duration') + '</th></tr></thead><tbody>' +
-      rows.map(s => '<tr><td>' + dateStr(s.date) + '</td><td>' + esc(t('mode.' + s.mode)) + '</td><td>' + s.wpm + '</td><td>' + s.acc + '%</td><td>' +
-        s.errors + '</td><td>' + s.corrections + '</td><td>' + (s.rtAvg ? s.rtAvg + ' ms' : '—') + '</td><td>' + U.fmtTime(s.durationS) + '</td></tr>').join('') +
+      rows.map(s => '<tr><td>' + dateStr(s.date) + '</td><td>' + esc(t('mode.' + s.mode)) + '</td><td>' + num(s.wpm) + '</td><td>' + num(s.acc) + '%</td><td>' +
+        num(s.errors) + '</td><td>' + num(s.corrections) + '</td><td>' + (U.num(s.rtAvg) ? num(s.rtAvg) + ' ms' : '—') + '</td><td>' + U.fmtTime(s.durationS) + '</td></tr>').join('') +
       '</tbody></table></div>';
   }
 
@@ -775,8 +778,8 @@
     const lang = LANG();
     const list = (arr, custom) => arr.map(x => '<li class="text-item"><div><b>' + esc(x.title) + '</b><p class="muted small">' +
       esc(x.body.slice(0, 120)) + (x.body.length > 120 ? '…' : '') + '</p><span class="muted small">' + t('chars', { n: x.body.length }) + '</span></div>' +
-      '<div class="row"><button class="btn primary sm" data-action="text-type:' + x.id + '">' + t('type') + '</button>' +
-      (custom ? '<button class="btn ghost sm" data-action="text-del:' + x.id + '">' + t('remove') + '</button>' : '') + '</div></li>').join('');
+      '<div class="row"><button class="btn primary sm" data-action="text-type:' + esc(x.id) + '">' + t('type') + '</button>' +
+      (custom ? '<button class="btn ghost sm" data-action="text-del:' + esc(x.id) + '">' + t('remove') + '</button>' : '') + '</div></li>').join('');
     const custom = TG.Texts.custom(lang);
     main.innerHTML = '<section class="texts"><h2>' + t('textsTitle') + ' · ' + t('layoutName.' + lang) + '</h2><p class="muted">' + t('textsIntro') + '</p>' +
       '<div class="card"><h3>' + t('addText') + '</h3>' +
@@ -807,15 +810,15 @@
       const isCur = u.id === curId;
       const L = sum ? TG.Curriculum.lessons(sum.lang).length : 0;
       const meta = sum && sum.sessions
-        ? t('profileStats', { l: Math.min(sum.lessonIndex + 1, L) + '/' + L, s: sum.sessions, w: sum.bestWpm || '—' }) + '<br>' +
-          t('lastActive', { d: dateStr(u.lastActive) })
+        ? esc(t('profileStats', { l: Math.min(U.num(sum.lessonIndex) + 1, L) + '/' + L, s: U.num(sum.sessions), w: U.num(sum.bestWpm) || '—' })) + '<br>' +
+          esc(t('lastActive', { d: dateStr(U.num(u.lastActive)) }))
         : t('noPractice');
       html += '<div class="user-card' + (isCur ? ' on' : '') + '">' +
-        '<button class="user-main" data-action="user-select:' + u.id + '">' + avatar(u) +
+        '<button class="user-main" data-action="user-select:' + esc(u.id) + '">' + avatar(u) +
         '<span><b>' + esc(TG.Store.userName(u)) + '</b>' + (isCur ? ' <span class="tag">' + t('activeProfile') + '</span>' : '') +
         '<small class="muted">' + meta + '</small></span></button>' +
-        '<div class="row"><button class="btn link" data-action="user-rename:' + u.id + '">' + t('rename') + '</button>' +
-        (users.length > 1 ? '<button class="btn link danger-text" data-action="user-delete:' + u.id + '">' + t('remove') + '</button>' : '') +
+        '<div class="row"><button class="btn link" data-action="user-rename:' + esc(u.id) + '">' + t('rename') + '</button>' +
+        (users.length > 1 ? '<button class="btn link danger-text" data-action="user-delete:' + esc(u.id) + '">' + t('remove') + '</button>' : '') +
         '</div></div>';
     });
     html += '</div><div class="card"><h3>' + t('newProfile') + '</h3>' +
@@ -923,7 +926,7 @@
       ths.map(k => {
         const d = t('th.' + k);
         return '<label><span><b>' + esc(d[0]) + '</b><small>' + esc(d[1]) + '</small></span><input type="number" min="' + (k === 'stableSessions' ? 1 : 0) +
-          '" max="' + (k === 'stableSessions' ? 10 : 100) + '" step="1" data-th="' + k + '" value="' + st.thresholds[k] + '"></label>';
+          '" max="' + (k === 'stableSessions' ? 10 : 100) + '" step="1" data-th="' + k + '" value="' + num(st.thresholds[k]) + '"></label>';
       }).join('') + '</div></div>' +
       '<div class="card"><h3>' + t('data') + ' · ' + esc(t('currentProfileData', { n: TG.Store.userName() })) + '</h3><p class="muted">' + t('dataInfo') + '</p><div class="row wrap gap">' +
       '<button class="btn primary" data-action="export">' + t('exportBtn') + '</button>' +
