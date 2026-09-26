@@ -75,7 +75,7 @@ TG.Util = {
 
   /** Нормализовать пользовательский текст к набираемому виду. */
   normalizeText(s) {
-    return String(s)
+    return String(s).normalize('NFC')
       .replace(/[–—−]/g, '-')
       .replace(/[«»“”„]/g, '"')
       .replace(/[‘’‚]/g, "'")
@@ -83,6 +83,24 @@ TG.Util = {
       .replace(/ /g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
+  },
+
+  /**
+   * Оставить в тексте только то, что можно набрать в раскладке lang.
+   * Диакритика снимается, если без неё символ есть на клавиатуре (é → e), остальное удаляется
+   * (эмодзи, символы других алфавитов). Перебор по кодовым точкам — эмодзи не режутся пополам.
+   * Возвращает {text, changed} — changed: сколько символов заменено или удалено.
+   */
+  typeable(s, lang) {
+    const lay = TG.Layout.get(lang);
+    let out = '', changed = 0;
+    for (const ch of TG.Util.normalizeText(s)) {
+      if (ch === ' ' || lay.byChar[ch]) { out += ch; continue; }
+      changed++;
+      const base = ch.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      if (base.length === 1 && lay.byChar[base]) out += base;
+    }
+    return { text: out.replace(/\s+/g, ' ').trim(), changed };
   },
 
   /** Ограничить строку по длине, не разрезая слова. */

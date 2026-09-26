@@ -60,17 +60,18 @@
       events.forEach(e => {
         if (!e.exp) return;
         const k = kid(e.exp);
+        // повторные нажатия на той же позиции после ошибки (режим остановки на ошибке) в освоение
+        // не идут: и исправление, и серия неверных нажатий — это одна ошибка, а не несколько
+        if (e.retry) return;
         if (!e.ok && e.got) {
           const ck = k + '>' + e.got;
           profile.confusions[ck] = (profile.confusions[ck] || 0) + 1;
         }
-        if (e.retry && e.ok) return; // исправляющее нажатие после ошибки не считаем в освоение
         const r = rec(profile, k);
         if (e.ok) r.h++; else r.e++;
         r.rec.push([e.ok ? 1 : 0, e.ok && e.rt > 0 && e.rt < M.rtCap ? Math.round(e.rt) : 0]);
         if (r.rec.length > M.recentSize) r.rec.splice(0, r.rec.length - M.recentSize);
         r.last = now;
-        if (e.retry) return;
         if (!isGap(e.prev) && !isGap(e.exp)) {
           const bk = kid(e.prev) + kid(e.exp);
           const b = profile.bigrams[bk] || (profile.bigrams[bk] = { n: 0, e: 0, rt: 0 });
@@ -93,7 +94,7 @@
       const S = TG.CONFIG.SRS;
       const per = {};
       events.forEach(e => {
-        if (!e.exp || e.exp === ' ' || (e.retry && e.ok)) return;
+        if (!e.exp || e.exp === ' ' || e.retry) return;
         const k = TG.Layout.keyId(lang, e.exp);
         const p = per[k] || (per[k] = { n: 0, ok: 0, rts: [] });
         p.n++;

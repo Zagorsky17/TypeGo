@@ -86,6 +86,7 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px s
 .header {
   position: sticky; top: 0; z-index: 10;
   display: flex; align-items: center; gap: 16px; padding: 10px 24px;
+  background: var(--bg); /* запасной вариант для браузеров без color-mix() (Safari < 16.2, Firefox < 113) */
   background: color-mix(in srgb, var(--bg) 88%, transparent);
   backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
   border-bottom: 1px solid var(--border);
@@ -138,6 +139,7 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px s
 .row { display: flex; align-items: center; gap: 8px; }
 .row.center { justify-content: center; }
 .row.end { justify-content: flex-end; }
+.row.between { justify-content: space-between; }
 .row.wrap { flex-wrap: wrap; }
 .row.gap { gap: 12px; margin-top: 16px; }
 
@@ -287,7 +289,10 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px s
 .hintline { text-align: center; min-height: 30px; margin: 10px 0 6px; color: var(--muted); font-size: 14px; }
 .hintline kbd { font-size: 15px; color: var(--text); }
 .notice { text-align: center; color: var(--warn); font-size: 13px; margin-bottom: 6px; }
-.hidden-input { position: absolute; opacity: 0; width: 1px; height: 1px; left: -100px; top: 0; pointer-events: none; }
+.hidden-input {
+  position: absolute; opacity: 0; width: 1px; height: 1px; left: -100px; top: 0; pointer-events: none;
+  font-size: 16px; /* меньше 16px — iOS масштабирует страницу при фокусе */
+}
 .free-area { width: 100%; min-height: 280px; font-family: var(--mono); line-height: 1.6; padding: 16px; border-radius: var(--radius); }
 .free-area.fs-s { font-size: 18px; } .free-area.fs-m { font-size: 22px; } .free-area.fs-l { font-size: 28px; }
 
@@ -374,7 +379,7 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px s
 .kcell b { font-size: 12px; color: var(--muted); }
 .st-new { background: var(--bad-soft) !important; }
 .st-learning { background: var(--warn-soft) !important; }
-.st-good { background: color-mix(in srgb, var(--good-soft) 60%, var(--surface-2)) !important; }
+.st-good { background: var(--good-soft) !important; background: color-mix(in srgb, var(--good-soft) 60%, var(--surface-2)) !important; }
 .st-mastered { background: var(--good-soft) !important; border-color: var(--good) !important; }
 .legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 12px; font-size: 12px; color: var(--muted); }
 .legend span { display: inline-flex; align-items: center; gap: 6px; background: none !important; border: 0 !important; }
@@ -447,7 +452,7 @@ body.in-session .nav:hover { opacity: 1; }
 /* ---------- адаптивность ---------- */
 @media (max-width: 900px) {
   .header { flex-wrap: wrap; padding: 10px 16px; }
-  .nav { order: 3; width: 100%; justify-content: flex-start; overflow-x: auto; }
+  .nav { order: 3; flex: 1 1 100%; justify-content: flex-start; overflow-x: auto; } /* flex-basis 100%: отдельная строка */
   .tools { margin-left: auto; }
   .tool.save span { display: none; }
   .user-chip span { display: none; }

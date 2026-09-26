@@ -50,6 +50,8 @@
         backspace: true,         // разрешить исправления в тестах и текстах
         sound: false,
         fontSize: 'm',           // s | m | l
+        ruVariant: 'auto',       // auto | pc | mac — вариант русской раскладки (Mac «Русская» отличается знаками)
+        ruVariantDetected: 'pc', // что определено по нажатиям в режиме auto
         showKeyboard: true,
         showFingers: true
       },
@@ -58,7 +60,8 @@
       dailyLog: {},              // 'YYYY-MM-DD' → секунды практики
       daily: null,               // план ежедневной тренировки на сегодня
       customTexts: [],
-      onboarded: false
+      onboarded: false,
+      lastExport: 0              // когда прогресс последний раз сохраняли в файл
     };
   }
 
@@ -165,6 +168,8 @@
     st.dailyMinutes = oneOf(st.dailyMinutes, C.DAILY.options, C.DAILY.defaultMinutes);
     st.hintsMode = oneOf(st.hintsMode, ['auto', 'always', 'never'], 'auto');
     st.fontSize = oneOf(st.fontSize, ['s', 'm', 'l'], 'm');
+    st.ruVariant = oneOf(st.ruVariant, ['auto', 'pc', 'mac'], 'auto');
+    st.ruVariantDetected = oneOf(st.ruVariantDetected, ['pc', 'mac'], 'pc');
     ['stopOnError', 'backspace', 'sound', 'showKeyboard', 'showFingers'].forEach(k => { st[k] = bool(st[k], D[k]); });
     const th = {};
     Object.keys(C.THRESHOLDS).forEach(k => {
@@ -188,6 +193,7 @@
       lang: oneOf(x.lang, ['ru', 'en'], 'ru'), added: num(x.added, 0, 0)
     }));
     data.onboarded = bool(data.onboarded, false);
+    data.lastExport = num(data.lastExport, 0, 0);
     data.createdAt = num(data.createdAt, Date.now(), 0);
     data.rev = int(data.rev, 0, 0);
     return data;
@@ -625,6 +631,7 @@
 
     /** Скачать файл с прогрессом текущего пользователя. */
     exportFile() {
+      Store.state.lastExport = Date.now();
       Store.saveNow();
       const name = Store.userName();
       const payload = Object.assign({ exportedAt: new Date().toISOString(), profileName: name }, Store.state);

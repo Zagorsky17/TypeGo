@@ -17,7 +17,7 @@
   }
 
   function create(ex, opts) {
-    const lay = TG.Layout.get(opts.lang);
+    const layout = () => TG.Layout.get(opts.lang); // вариант раскладки может смениться посреди урока
     const s = {
       ex,
       text: TG.Gen.clean(ex.text),
@@ -27,6 +27,8 @@
       pendingError: false,
       events: [],
       corrections: 0,
+      okCount: 0,          // верных нажатий (счётчики вместо пересчёта событий на каждое нажатие)
+      correct: 0,          // верно набранных позиций (режим без остановки на ошибке)
       startT: 0,
       lastT: 0,
       endT: 0,
@@ -34,6 +36,7 @@
       mismatchNotified: false,
       lastErrorChar: null,
       codeMode: false,     // раскладка ОС отличается от урока — символ определяется по физической клавише
+      osLang: null,        // язык раскладки ОС по последней набранной букве
       timer: null
     };
 
@@ -64,10 +67,19 @@
     function resolveChar(e) {
       const key = e.key;
       if (!key || key.length !== 1) return { ch: null };
+      const lay = layout();
       const map = lay.byCode[e.code];
       const mapped = map ? (e.shiftKey ? map.s : map.n) : null;
       const src = TG.Layout.detect(key);
-      if (src) s.codeMode = src !== opts.lang && !!map;
+      if (src) { s.osLang = src; s.codeMode = src !== opts.lang && !!map; }
+      // русская раскладка ОС: знак подсказывает, «ПК» это или Mac «Русская»
+      if (opts.lang === 'ru' && s.osLang === 'ru' && opts.onVariant) {
+        const v = TG.Layout.variantSignal(e.code, e.shiftKey, key);
+        if (v && v !== TG.Layout.variant('ru')) {
+          opts.onVariant(v);
+          if (TG.Layout.variant('ru') === v) return resolveChar(e); // вариант переключён — перечитать клавишу
+        }
+      }
       if (s.codeMode && mapped) return { ch: mapped, mapped: true };
       if (lay.byChar[key]) {
         const exp = s.text[s.pos];
@@ -99,7 +111,7 @@
         prev: s.text[s.pos - 1], prev2: s.text[s.pos - 2],
         retry: s.pendingError
       });
-      if (ok) s.lastErrorChar = null;
+      if (ok) { s.lastErrorChar = null; s.okCount++; }
       else {
         s.errorAt.add(s.pos);
         s.lastErrorChar = exp;
@@ -110,6 +122,7 @@
         else s.pendingError = true;
       } else {
         s.typed[s.pos] = ch;
+        if (ok) s.correct++;
         s.pos++;
       }
       ensureText();
@@ -123,6 +136,7 @@
     function backspace() {
       if (s.finished || ex.stopOnError || !ex.backspace || s.pos === 0) return false;
       s.pos--;
+      if (s.typed[s.pos] === s.text[s.pos]) s.correct--;
       s.typed.length = s.pos;
       s.corrections++;
       changed({ corrected: true });
@@ -130,10 +144,7 @@
     }
 
     function correctChars() {
-      if (ex.stopOnError) return s.pos;
-      let n = 0;
-      for (let i = 0; i < s.pos; i++) if (s.typed[i] === s.text[i]) n++;
-      return n;
+      return ex.stopOnError ? s.pos : s.correct;
     }
 
     function finish(endT) {
@@ -171,7 +182,7 @@
       live() {
         const sec = this.elapsed();
         const total = s.events.length;
-        const ok = s.events.filter(e => e.ok).length;
+        const ok = s.okCount;
         return {
           wpm: sec > 1 ? Math.round(correctChars() / 5 / (sec / 60)) : 0,
           acc: total ? Math.round(ok / total * 100) : 100,

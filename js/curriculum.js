@@ -25,8 +25,11 @@
   const cache = {};
 
   function build(lang) {
-    if (cache[lang]) return cache[lang];
+    const lay = TG.Layout.get(lang);
+    const key = lang + ':' + lay.variant;
+    if (cache[key]) return cache[key];
     const P = PLAN[lang];
+    const has = k => k === SHIFT || !!lay.byChar[k]; // в Mac «Русская» нет, например, «*»
     const L = [];
     const add = (stage, type, keys, extra) => {
       L.push(Object.assign({ id: lang + '-' + L.length, stage, type, keys: keys || [] }, extra || {}));
@@ -53,10 +56,10 @@
     add(11, 'speed', [], { targetWpm: 25 });
     add(11, 'speed', [], { targetWpm: 35 });
     add(11, 'speed', [], { targetWpm: 45 });
-    add(12, 'advanced', P.symbols, { variant: 'symbols' });
+    add(12, 'advanced', P.symbols.filter(has), { variant: 'symbols' });
     add(12, 'advanced', [], { variant: 'mixed' });
     add(12, 'advanced', [], { variant: 'long' });
-    cache[lang] = L;
+    cache[key] = L;
     return L;
   }
 
@@ -102,7 +105,7 @@
         if (ch !== ch.toLowerCase() && !set.has(SHIFT)) return false;
         return set.has(ch.toLowerCase());
       }
-      return set.has(ch);
+      return set.has(ch) && !!lay.byChar[ch];
     },
 
     textAllowed(text, set, lang) {

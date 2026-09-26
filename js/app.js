@@ -56,8 +56,15 @@
       '<span>' + TG.Util.esc(name) + '</span></button>';
   }
 
+  /** Вариант русской раскладки из настроек (или определённый по нажатиям). */
+  function applyVariant() {
+    const st = TG.Store.settings();
+    TG.Layout.setVariant('ru', st.ruVariant === 'auto' ? st.ruVariantDetected : st.ruVariant);
+  }
+
   function applyPrefs() {
     const st = TG.Store.settings();
+    applyVariant();
     TG.I18n.set(st.uiLang);
     applyTheme();
     document.title = 'TypeGo — ' + t('appTagline');
@@ -82,6 +89,7 @@
       return;
     }
     const st = TG.Store.settings();
+    applyVariant();
     TG.I18n.set(st.uiLang);
     applyTheme();
     document.title = 'TypeGo — ' + t('appTagline');

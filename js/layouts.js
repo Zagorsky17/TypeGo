@@ -15,6 +15,12 @@
       normal: ['ё1234567890-=', 'йцукенгшщзхъ\\', 'фывапролджэ', 'ячсмитьбю.'],
       shift: ['Ё!"№;%:?*()_+', 'ЙЦУКЕНГШЩЗХЪ/', 'ФЫВАПРОЛДЖЭ', 'ЯЧСМИТЬБЮ,']
     },
+    // Mac «Русская» (не «Русская – ПК»): знаки на Shift+цифры, «ё» на клавише \, / и ? на клавише Slash.
+    // Получено из macOS (UCKeyTranslate, com.apple.keylayout.Russian). «Русская – ПК» совпадает с ru.
+    ruMac: {
+      normal: [']1234567890-=', 'йцукенгшщзхъё', 'фывапролджэ', 'ячсмитьбю/'],
+      shift: ['[!"№%:,.;()_+', 'ЙЦУКЕНГШЩЗХЪЁ', 'ФЫВАПРОЛДЖЭ', 'ЯЧСМИТЬБЮ?']
+    },
     en: {
       normal: ['`1234567890-=', 'qwertyuiop[]\\', "asdfghjkl;'", 'zxcvbnm,./'],
       shift: ['~!@#$%^&*()_+', 'QWERTYUIOP{}|', 'ASDFGHJKL:"', 'ZXCVBNM<>?']
@@ -43,10 +49,14 @@
   };
 
   const cache = {};
+  // Вариант раскладки для языка: ru — 'pc' (ЙЦУКЕН) или 'mac' (Mac «Русская»). Задаётся из настроек.
+  const variants = { ru: 'pc', en: 'pc' };
 
-  function build(lang) {
-    if (cache[lang]) return cache[lang];
-    const src = CHARS[lang];
+  function build(lang, variant) {
+    variant = variant || variants[lang] || 'pc';
+    const key = lang + ':' + variant;
+    if (cache[key]) return cache[key];
+    const src = CHARS[lang === 'ru' && variant === 'mac' ? 'ruMac' : lang];
     const rows = [];
     const byChar = {};   // символ → {code, shift, finger, hand, base}
     const byCode = {};   // код → {n, s}
@@ -66,13 +76,13 @@
     byChar[' '] = { code: 'Space', shift: false, finger: 'th', hand: 't', base: ' ' };
     byCode.Space = { n: ' ', s: ' ' };
     const layout = {
-      lang, rows, byChar, byCode,
+      lang, variant, rows, byChar, byCode,
       vowels: VOWELS[lang],
       letters: LETTERS[lang],
       homeKeys: HOME_CODES.map(c => byCode[c].n),
       isLetter: ch => LETTERS[lang].indexOf(ch.toLowerCase()) >= 0
     };
-    cache[lang] = layout;
+    cache[key] = layout;
     return layout;
   }
 
@@ -80,6 +90,19 @@
     FINGERS,
     HOME_CODES,
     get: build,
+    variant: lang => variants[lang] || 'pc',
+    setVariant(lang, v) { variants[lang] = lang === 'ru' && v === 'mac' ? 'mac' : 'pc'; },
+    /**
+     * По нажатию понять вариант русской раскладки ОС: знак, который в вариантах стоит на разных клавишах.
+     * Возвращает 'mac' | 'pc' | null. Вызывать, только если в ОС включена русская раскладка.
+     */
+    variantSignal(code, shift, key) {
+      const mac = build('ru', 'mac').byCode[code], pc = build('ru', 'pc').byCode[code];
+      if (!mac || !pc || !key) return null;
+      const m = shift ? mac.s : mac.n, p = shift ? pc.s : pc.n;
+      if (m === p) return null;
+      return key === m ? 'mac' : key === p ? 'pc' : null;
+    },
     /** Идентификатор клавиши для статистики: буквы — в нижнем регистре, прочие символы — как есть. */
     keyId(lang, ch) {
       const L = build(lang);

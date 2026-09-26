@@ -89,6 +89,18 @@
       mastery: 'Порог слабой клавиши должен быть меньше порога освоенной.',
       perfect: 'Требование 100% не оставляет права на единственную ошибку — максимум 99.'
     },
+    ruVariant: 'Вариант русской раскладки',
+    ruVariantOpt: { auto: 'Определять по нажатиям', pc: 'ЙЦУКЕН (ПК, «Русская – ПК» на Mac)', mac: 'Mac «Русская»' },
+    variantDetected: {
+      mac: 'Похоже, в системе раскладка Mac «Русская» — подсказки на клавиатуре переключены. Изменить можно в Настройках.',
+      pc: 'Похоже, в системе раскладка ЙЦУКЕН (ПК) — подсказки на клавиатуре переключены. Изменить можно в Настройках.'
+    },
+    textMismatch: 'Большую часть текста нельзя набрать в выбранной раскладке — проверьте язык текста.',
+    textCleaned: 'Текст сохранён. Символов, которых нет на клавиатуре, заменено или удалено: {n}.',
+    profilesPrivacy: 'Профили не защищены паролем: имена и прогресс видит любой, кто пользуется этим браузером.',
+    storageWhere: 'Где хранятся данные: только в этом браузере на этом устройстве. Их не будет видно в другом браузере, в режиме инкогнито (там всё удаляется при закрытии окна), после очистки данных сайтов, а в некоторых браузерах — и после переноса папки с приложением. Для переноса и резервной копии используйте файл.',
+    backupReminder: 'Прогресс в файл последний раз сохраняли {d}. Сохраните копию — данные хранятся только в этом браузере.',
+    backupReminderNever: 'Прогресс ещё ни разу не сохраняли в файл. Сохраните копию — данные хранятся только в этом браузере.',
     reload: 'Перезагрузить',
     dismiss: 'Скрыть',
     importNewer: 'Файл создан более новой версией TypeGo — обновите приложение.',
@@ -429,6 +441,18 @@
       mastery: 'The weak key threshold must be lower than the mastered key threshold.',
       perfect: 'Requiring 100% leaves no room for a single mistake — the maximum is 99.'
     },
+    ruVariant: 'Russian layout variant',
+    ruVariantOpt: { auto: 'Detect from keystrokes', pc: 'JCUKEN (PC, "Russian – PC" on Mac)', mac: 'Mac "Russian"' },
+    variantDetected: {
+      mac: 'Your system seems to use the Mac "Russian" layout — keyboard hints switched. You can change this in Settings.',
+      pc: 'Your system seems to use the JCUKEN (PC) layout — keyboard hints switched. You can change this in Settings.'
+    },
+    textMismatch: 'Most of the text cannot be typed in the selected layout — check the text language.',
+    textCleaned: 'Text saved. Characters not on the keyboard were replaced or removed: {n}.',
+    profilesPrivacy: 'Profiles have no passwords: names and progress are visible to anyone using this browser.',
+    storageWhere: 'Where the data lives: only in this browser on this device. It is not visible in another browser or in private mode (everything is deleted when the window closes), it disappears if site data is cleared and, in some browsers, if the app folder is moved. Use a file to transfer or back it up.',
+    backupReminder: 'Progress was last saved to a file on {d}. Save a copy — the data lives only in this browser.',
+    backupReminderNever: 'Progress has never been saved to a file. Save a copy — the data lives only in this browser.',
     reload: 'Reload',
     dismiss: 'Dismiss',
     importNewer: 'The file was created by a newer version of TypeGo — please update the app.',

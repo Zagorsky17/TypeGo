@@ -207,7 +207,7 @@
     if (session.errBoost[key] > 0) return true;
     if (session.ex.hideHints) return false;
     if (session.ex.mode === 'lesson' && (session.ex.focusKeys || []).indexOf(key) >= 0) return true;
-    if (k === ' ') return TG.Mastery.overall(P(), LANG()) < TH().hintFadeMastery;
+    if (k === ' ') return session.overall < TH().hintFadeMastery; // считается один раз на урок
     return TG.Mastery.score(P(), key) < TH().hintFadeMastery;
   }
 
@@ -266,7 +266,8 @@
     const inner = document.getElementById('textInner');
     const spans = [];
 
-    session = { ex, kb, fingers, spans, inner, lastPos: 0, errBoost: {}, handled: false };
+    session = { ex, kb, fingers, spans, inner, lastPos: 0, errBoost: {}, handled: false,
+      overall: TG.Mastery.overall(P(), lang), scrollQueued: false };
 
     const appendSpans = text => {
       const frag = document.createDocumentFragment();
@@ -282,6 +283,18 @@
 
     const engine = TG.Engine.create(ex, {
       lang, sound: st.sound,
+      // по нажатиям понятно, что в ОС Mac «Русская» (или «ПК»): переключить подсказки
+      onVariant: v => {
+        if (ST().ruVariant !== 'auto') return;
+        ST().ruVariantDetected = v;
+        TG.Layout.setVariant('ru', v);
+        TG.Store.save();
+        session.kb = TG.Keyboard.render(document.getElementById('kbWrap'), lang);
+        session.kb.applyStatus(P(), TH(), ST().hintsMode === 'auto');
+        const n = document.getElementById('notice');
+        n.textContent = t('variantDetected.' + v);
+        n.hidden = false;
+      },
       onChange: (s, info) => {
         if (s.text.length > spans.length) appendSpans(s.text);
         if (!info.tick) {
@@ -336,11 +349,19 @@
       sp.className = cls;
     }
     session.lastPos = s.pos;
-    const cur = spans[Math.min(s.pos, spans.length - 1)];
-    if (cur) {
-      const lh = cur.offsetHeight || 40;
-      const off = Math.max(0, cur.offsetTop - lh);
-      inner.style.transform = 'translateY(' + (-off) + 'px)';
+    // чтение offsetTop пересчитывает раскладку страницы — делаем это не чаще раза за кадр
+    if (!session.scrollQueued) {
+      session.scrollQueued = true;
+      const sess = session;
+      requestAnimationFrame(() => {
+        sess.scrollQueued = false;
+        if (session !== sess) return;
+        const cur = spans[Math.min(sess.engine ? sess.engine.state.pos : s.pos, spans.length - 1)];
+        if (!cur) return;
+        const lh = cur.offsetHeight || 40;
+        const off = Math.max(0, cur.offsetTop - lh);
+        if (off !== sess.scrollOff) { sess.scrollOff = off; inner.style.transform = 'translateY(' + (-off) + 'px)'; }
+      });
     }
   }
 
@@ -619,6 +640,13 @@
         '</div></div>';
     }
     if (todayMin >= TG.CONFIG.BREAK_REMINDER_MIN) html += '<p class="note">' + t('breakHint', { m: todayMin }) + '</p>';
+    // данные живут только в этом браузере — время от времени напоминаем сохранить их в файл
+    const R = TG.CONFIG.BACKUP_REMINDER;
+    const sinceExport = ['ru', 'en'].reduce((n, l) => n + st.profiles[l].sessions.filter(x => x.date > st.lastExport).length, 0);
+    if (sinceExport >= R.sessions && Date.now() - st.lastExport > R.days * 86400000) {
+      html += '<div class="note row wrap between"><span>' + esc(st.lastExport ? t('backupReminder', { d: dateStr(st.lastExport) }) : t('backupReminderNever')) +
+        '</span><button class="btn primary sm" data-action="save">' + esc(t('saveProgress')) + '</button></div>';
+    }
 
     // Прогресс
     html += '<div class="card progress-card"><div class="card-head"><h3>' + t('progress') + '</h3><span class="muted">' + t('stageOf', { n: stage }) + ' · ' + esc(t('stage.' + stage)) + '</span></div>' +
@@ -813,7 +841,7 @@
     const users = TG.Store.users();
     const curId = TG.Store.index.current;
     let html = '<section class="profiles"><h2>' + (pickerMode ? t('whoIsLearning') : t('profiles')) + '</h2>' +
-      '<p class="muted">' + t('profilesIntro') + '</p><div class="user-grid">';
+      '<p class="muted">' + t('profilesIntro') + ' ' + t('profilesPrivacy') + '</p><div class="user-grid">';
     users.forEach(u => {
       const sum = TG.Store.userSummary(u.id);
       const isCur = u.id === curId;
@@ -927,6 +955,8 @@
       '<div class="card"><h3>' + t('general') + '</h3><div class="set-list">' +
       '<label><span>' + t('uiLanguage') + '</span>' + sel('uiLang', ['ru', 'en'], o => o === 'ru' ? 'Русский' : 'English') + '</label>' +
       '<label><span>' + t('keyboardLayout') + '</span>' + sel('layoutLang', ['ru', 'en'], o => o === 'ru' ? 'Русская (ЙЦУКЕН)' : 'English (QWERTY)') + '</label>' +
+      '<label><span>' + t('ruVariant') + '</span>' + sel('ruVariant', ['auto', 'pc', 'mac'], o => t('ruVariantOpt.' + o) +
+        (o === 'auto' ? ' — ' + t('ruVariantOpt.' + st.ruVariantDetected) : '')) + '</label>' +
       '<label><span>' + t('theme') + '</span>' + sel('theme', ['auto', 'light', 'dark'], o => t('themeOpt.' + o)) + '</label>' +
       '<label><span>' + t('dailyGoal') + '</span>' + sel('dailyMinutes', TG.CONFIG.DAILY.options, o => t('minutesShort', { n: o })) + '</label>' +
       '<label><span>' + t('fontSize') + '</span>' + sel('fontSize', ['s', 'm', 'l'], o => t('fontOpt.' + o)) + '</label>' +
@@ -945,7 +975,7 @@
         return '<label><span><b>' + esc(d[0]) + '</b><small>' + esc(d[1]) + '</small></span><input type="number" min="' + (k === 'stableSessions' ? 1 : 0) +
           '" max="' + (k === 'stableSessions' ? 10 : 100) + '" step="1" data-th="' + k + '" value="' + num(st.thresholds[k]) + '"></label>';
       }).join('') + '</div></div>' +
-      '<div class="card"><h3>' + t('data') + ' · ' + esc(t('currentProfileData', { n: TG.Store.userName() })) + '</h3><p class="muted">' + t('dataInfo') + '</p><div class="row wrap gap">' +
+      '<div class="card"><h3>' + t('data') + ' · ' + esc(t('currentProfileData', { n: TG.Store.userName() })) + '</h3><p class="muted">' + t('dataInfo') + '</p><p class="muted small">' + t('storageWhere') + '</p><div class="row wrap gap">' +
       '<button class="btn primary" data-action="export">' + t('exportBtn') + '</button>' +
       '<button class="btn ghost" data-action="import">' + t('importBtn') + '</button>' +
       '<button class="btn ghost danger-text" data-action="reset-layout">' + t('resetLayoutBtn') + '</button>' +
@@ -961,7 +991,7 @@
       if (k === 'dailyMinutes') v = +v;
       st[k] = v;
       TG.Store.save();
-      if (k === 'uiLang' || k === 'theme' || k === 'layoutLang') TG.App.applyPrefs();
+      if (k === 'uiLang' || k === 'theme' || k === 'layoutLang' || k === 'ruVariant') TG.App.applyPrefs();
       toast(t('saved'));
     }));
     main.querySelectorAll('[data-th]').forEach(el => el.addEventListener('change', () => {
@@ -1065,10 +1095,11 @@
         const added = TG.Texts.add(document.getElementById('ntTitle').value, body, document.getElementById('ntLang').value);
         if (added.error) {
           toast(added.error === 'empty' ? t('textEmpty') : added.error === 'tooLong'
-            ? t('textTooLong', { n: TG.CONFIG.TEXTS.maxChars }) : t('textsFull', { n: TG.CONFIG.TEXTS.maxTotalChars }));
+            ? t('textTooLong', { n: TG.CONFIG.TEXTS.maxChars }) : added.error === 'mismatch'
+              ? t('textMismatch') : t('textsFull', { n: TG.CONFIG.TEXTS.maxTotalChars }));
           break;
         }
-        toast(t('textAdded'));
+        toast(added.changed ? t('textCleaned', { n: added.changed }) : t('textAdded'));
         renderTexts();
         break;
       }
@@ -1153,10 +1184,47 @@
     }
   }
 
+  /*
+   * Ввод с экранных клавиатур (резерв, когда keydown не сообщает символ: e.key = 'Unidentified').
+   * Android-клавиатуры часто вводят через композицию: в e.data приходит всё слово целиком
+   * («п», «пр», «при»…), поэтому в урок передаются только новые символы, а поле во время
+   * композиции не очищается (иначе она сбрасывается).
+   */
+  function feedComposition(data) {
+    const prev = session.comp || '';
+    if (data.startsWith(prev)) session.engine.inputText(data.slice(prev.length));
+    session.comp = data; // автозамена переписала слово — лишнего не вводим, продолжаем от нового
+  }
+
   function onInput(e) {
     if (e.target.id !== 'hiddenInput' || !session || !session.engine) return;
+    if (e.isComposing || (e.inputType === 'insertCompositionText' && session.comp != null)) {
+      feedComposition(e.data || '');
+      return;
+    }
+    // некоторые браузеры присылают итоговое слово ещё раз после compositionend — оно уже введено
+    if (session.compDone != null && (e.inputType === 'insertCompositionText' || e.data === session.compDone)) {
+      session.compDone = null;
+      e.target.value = '';
+      return;
+    }
     if (!session.handled && e.data) session.engine.inputText(e.data);
     session.handled = false;
+    e.target.value = '';
+  }
+
+  function onCompositionStart(e) {
+    if (e.target.id !== 'hiddenInput' || !session || !session.engine) return;
+    session.comp = '';
+    session.compDone = null;
+  }
+
+  function onCompositionEnd(e) {
+    if (e.target.id !== 'hiddenInput' || !session || !session.engine) return;
+    const final = e.data || '';
+    if (session.comp != null) feedComposition(final);
+    session.comp = null;
+    session.compDone = final;
     e.target.value = '';
   }
 
@@ -1173,6 +1241,8 @@
       });
       document.addEventListener('keydown', onKeydown);
       document.addEventListener('input', onInput);
+      document.addEventListener('compositionstart', onCompositionStart);
+      document.addEventListener('compositionend', onCompositionEnd);
     },
     go,
     /** Показать выбор профиля (при запуске, если профилей несколько). */
